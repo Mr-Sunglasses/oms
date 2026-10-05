@@ -142,7 +142,6 @@ pub fn wallpaper_index(theme: &Theme, which: Option<&str>, settings: &Settings) 
 pub fn random_below(n: usize) -> usize {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as usize ^ d.as_secs() as usize)
-        .unwrap_or(0);
+        .map_or(0, |d| d.subsec_nanos() as usize ^ d.as_secs() as usize);
     nanos % n.max(1)
 }

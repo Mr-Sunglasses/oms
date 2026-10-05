@@ -169,8 +169,7 @@ impl App {
 pub(super) fn start_update_check(repos: &Repos, settings: &mut Settings, tx: Sender<String>) {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     let pull = now.saturating_sub(settings.last_update_check) >= UPDATE_EVERY_SECS;
     if pull {
         settings.last_update_check = now;

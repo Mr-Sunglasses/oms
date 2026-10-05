@@ -352,8 +352,7 @@ impl App {
 fn same_file(a: &PathBuf, b: &PathBuf) -> bool {
     a == b
         || a.canonicalize()
-            .ok()
-            .is_some_and(|a| b.canonicalize().ok() == Some(a))
+            .is_ok_and(|a| b.canonicalize().ok() == Some(a))
 }
 
 pub fn file_name(path: &Path) -> String {

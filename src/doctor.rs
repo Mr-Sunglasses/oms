@@ -207,14 +207,12 @@ fn check_downloads(r: &mut Report, repos: Option<&Repos>) {
     match repos {
         Some(repos) => {
             let count = |dir: &Path| {
-                fs::read_dir(dir)
-                    .map(|d| {
-                        d.flatten()
-                            .filter(|e| e.path().is_dir() || dir.ends_with("themes"))
-                            .filter(|e| !e.file_name().to_string_lossy().starts_with('.'))
-                            .count()
-                    })
-                    .unwrap_or(0)
+                fs::read_dir(dir).map_or(0, |d| {
+                    d.flatten()
+                        .filter(|e| e.path().is_dir() || dir.ends_with("themes"))
+                        .filter(|e| !e.file_name().to_string_lossy().starts_with('.'))
+                        .count()
+                })
             };
             r.line(
                 Level::Ok,

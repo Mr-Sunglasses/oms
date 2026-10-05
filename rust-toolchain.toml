@@ -1,0 +1,6 @@
+# The same Rust (and clippy) locally and in CI, so lints don't drift.
+# Bump it on purpose, together with any new lint fixes.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
