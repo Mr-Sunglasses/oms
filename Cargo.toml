@@ -1,6 +1,6 @@
 [package]
 name = "oms"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Pick an Omarchy theme for Ghostty and a matching macOS wallpaper from one TUI"
 license = "MIT"
@@ -17,6 +17,7 @@ ratatui-image = { version = "11", default-features = false, features = ["crosste
 objc2 = "0.6.4"
 objc2-app-kit = "0.3.2"
 objc2-foundation = "0.3.2"
+plist = "1.10.1"
 
 [profile.release]
 lto = true

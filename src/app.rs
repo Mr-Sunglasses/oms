@@ -239,7 +239,7 @@ impl App {
             return Ok(());
         };
         wallpaper::set(&path)?;
-        self.status = format!("Wallpaper set to {}.", file_name(&path));
+        self.status = format!("Wallpaper set to {} on every Space.", file_name(&path));
         self.applied_wallpaper = Some(path);
         Ok(())
     }

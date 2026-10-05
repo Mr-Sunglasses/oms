@@ -7,7 +7,7 @@ Pick an [Omarchy](https://github.com/omacom/omarchy) theme for [Ghostty](https:/
 - **All 22 Omarchy themes**, each with a preview of its colors and its own wallpapers.
 - **Live preview:** while you move through the list, Ghostty recolors to the selected theme. Quit without applying and your theme comes back.
 - **Real wallpaper previews**, drawn as images right in the terminal.
-- **One key applies both:** the Ghostty theme and the desktop wallpaper on every display.
+- **One key applies both:** the Ghostty theme and the desktop wallpaper, on every Space and display.
 
 macOS only. Themes come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and wallpapers from [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers).
 
@@ -70,7 +70,7 @@ To use your own checkouts of the two repos, pass `--themes <dir>` and `--wallpap
 ## How it works
 
 - **Theme:** sets the `theme = Omarchy …` line in your Ghostty config and leaves the rest of the file alone. It edits the file that sets the theme now, or `~/.config/ghostty/config` if none does. It then sends Ghostty `SIGUSR2`, which makes Ghostty reload its config and recolor every window.
-- **Wallpaper:** uses macOS's `NSWorkspace` wallpaper API, so it needs no extra permissions. It sets the wallpaper for the current Space on each display.
+- **Wallpaper:** sets the wallpaper on every Space and every display, and makes it the default for new Spaces. macOS's public API only changes the current Space, so `oms` updates the wallpaper settings file directly (`~/Library/Application Support/com.apple.wallpaper/Store/Index.plist`) and restarts `WallpaperAgent` so it reloads them. This needs no extra permissions. On macOS before 14, which doesn't have that file, it changes the current Space only.
 - **Preview:** wallpapers are drawn with the Kitty graphics protocol, which Ghostty supports. Other terminals fall back to colored blocks.
 
 Notes:
