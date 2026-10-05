@@ -67,6 +67,60 @@ pub fn is_installed() -> bool {
     plist_path().exists()
 }
 
+/// An oms agent other than this setup's, e.g. one left behind by a run with a
+/// different `OMS_DATA_DIR`. It still switches the real wallpaper.
+pub struct OtherAgent {
+    pub label: String,
+    pub plist: PathBuf,
+    /// The binary it runs, if the plist could be read.
+    pub program: Option<PathBuf>,
+}
+
+/// Every oms agent in `~/Library/LaunchAgents` except this setup's own.
+pub fn other_agents() -> Vec<OtherAgent> {
+    let Some(dir) = plist_path().parent().map(PathBuf::from) else {
+        return Vec::new();
+    };
+    let own = label();
+    let mut agents: Vec<OtherAgent> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let label = other_label(&name, &own)?;
+            let plist = entry.path();
+            let program = plist::Value::from_file(&plist).ok().and_then(|v| {
+                let args = v.as_dictionary()?.get("ProgramArguments")?.as_array()?;
+                Some(PathBuf::from(args.first()?.as_string()?))
+            });
+            Some(OtherAgent {
+                label,
+                plist,
+                program,
+            })
+        })
+        .collect();
+    agents.sort_by(|a, b| a.label.cmp(&b.label));
+    agents
+}
+
+/// The label in a `LaunchAgents` file name, if it's an oms agent other than `own`.
+fn other_label(file_name: &str, own: &str) -> Option<String> {
+    let label = file_name.strip_suffix(".plist")?;
+    let is_oms = label == LABEL || label.strip_prefix(LABEL)?.starts_with('.');
+    (is_oms && label != own).then(|| label.to_string())
+}
+
+/// Stops and removes another oms agent.
+pub fn remove_other(agent: &OtherAgent) -> Result<()> {
+    let _ = Command::new("launchctl")
+        .args(["bootout", &format!("{}/{}", domain(), agent.label)])
+        .output();
+    fs::remove_file(&agent.plist)?;
+    Ok(())
+}
+
 /// Installs or removes the agent to match the settings.
 pub fn sync(settings: &Settings) -> Result<()> {
     if settings.needs_daemon() {
@@ -350,4 +404,26 @@ fn rotate(themes: &[Theme], settings: &Settings, dark: bool) -> Result<()> {
     let path = actions::apply_wallpaper(theme, index, &mut fresh)?;
     log(&format!("rotated to {}", path.display()));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::other_label;
+
+    #[test]
+    fn finds_other_oms_agents_only() {
+        let own = "xyz.kanishkk.oms";
+        assert_eq!(
+            other_label("xyz.kanishkk.oms.b8919715.plist", own).as_deref(),
+            Some("xyz.kanishkk.oms.b8919715")
+        );
+        assert_eq!(other_label("xyz.kanishkk.oms.plist", own), None);
+        assert_eq!(
+            other_label("xyz.kanishkk.oms.plist", "xyz.kanishkk.oms.1234abcd").as_deref(),
+            Some("xyz.kanishkk.oms")
+        );
+        assert_eq!(other_label("xyz.kanishkk.omsx.plist", own), None);
+        assert_eq!(other_label("com.apple.foo.plist", own), None);
+        assert_eq!(other_label("xyz.kanishkk.oms.b8919715", own), None);
+    }
 }

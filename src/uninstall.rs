@@ -21,6 +21,11 @@ pub fn run(args: &[String]) -> Result<()> {
         data_dir().display()
     );
     println!("  - the background agent (light/dark switching, rotation)");
+    let others = daemon::other_agents();
+    if !others.is_empty() {
+        let labels: Vec<&str> = others.iter().map(|a| a.label.as_str()).collect();
+        println!("  - other oms agents ({})", labels.join(", "));
+    }
     if !settings.apps.is_empty() {
         println!(
             "  - app themes set up by oms ({})",
@@ -40,6 +45,9 @@ pub fn run(args: &[String]) -> Result<()> {
     }
 
     daemon::uninstall()?;
+    for agent in &others {
+        daemon::remove_other(agent)?;
+    }
     for app in &settings.apps {
         apps::remove(app)?;
     }

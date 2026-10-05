@@ -58,6 +58,7 @@ pub fn run_checks(repos: Option<&Repos>) {
     check_downloads(&mut r, repos);
     check_wallpapers(&mut r);
     check_agent(&mut r, &settings);
+    check_other_agents(&mut r);
     check_apps(&mut r, &settings);
 
     println!();
@@ -273,6 +274,30 @@ fn check_agent(r: &mut Report, settings: &Settings) {
             "should be running but isn't; run `oms rotate off` then turn it back on",
         ),
         (false, true, _) => r.line(Level::Warn, "Agent", "installed but not needed"),
+    }
+}
+
+/// No other oms agent is left behind (e.g. by a run with a different
+/// `OMS_DATA_DIR`); one would keep switching the wallpaper on its own.
+fn check_other_agents(r: &mut Report) {
+    let uid = run("id", &["-u"]).unwrap_or_default();
+    for agent in daemon::other_agents() {
+        let program = match &agent.program {
+            Some(p) if p.exists() => p.display().to_string(),
+            Some(p) => format!("{} (missing)", p.display()),
+            None => "unknown binary".to_string(),
+        };
+        r.line(
+            Level::Fail,
+            "Other agent",
+            format!(
+                "{} runs {program} and can change your wallpaper; remove it with\n{:21}launchctl bootout gui/{uid}/{}; rm '{}'",
+                agent.label,
+                "",
+                agent.label,
+                agent.plist.display()
+            ),
+        );
     }
 }
 
