@@ -173,7 +173,7 @@ Builds are signed and notarized automatically once these repository secrets exis
 | `APPLE_TEAM_ID` | Your 10-character team ID |
 | `APPLE_APP_PASSWORD` | An [app-specific password](https://account.apple.com) for notarization |
 
-The website lives in [`site/`](site) and deploys to GitHub Pages on every push that changes it. Add news to the "Notes" list in `site/index.html`. After themes change, rebuild its theme data and wallpaper thumbnails with `./site/build.py`.
+The website lives in [`site/`](site) and is hosted on Netlify ([`netlify.toml`](netlify.toml) publishes the folder as-is). Deploy it with `netlify deploy --prod`, or link the repo in Netlify so every push deploys. Add news to the "Notes" list in `site/index.html`. After themes change, rebuild its theme data and wallpaper thumbnails with `./site/build.py`.
 
 ## Credits
 

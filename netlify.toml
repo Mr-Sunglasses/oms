@@ -1,0 +1,10 @@
+# The website (site/) is plain static files; there's nothing to build.
+[build]
+  publish = "site"
+  command = ""
+
+# Wallpaper thumbnails rarely change; let browsers keep them for a day.
+[[headers]]
+  for = "/wallpapers/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
