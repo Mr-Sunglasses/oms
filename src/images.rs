@@ -19,7 +19,7 @@ use crate::settings::data_dir;
 /// Previews are downsized to fit this, which is plenty for a terminal pane.
 const PREVIEW_SIZE: (u32, u32) = (1600, 1000);
 /// Thumbnails for the strip under the preview.
-const THUMB_SIZE: (u32, u32) = (320, 200);
+const THUMB_SIZE: (u32, u32) = (480, 300);
 const CACHE_SIZE: usize = 12;
 
 pub struct Preview {

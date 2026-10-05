@@ -1,6 +1,6 @@
 [package]
 name = "oms"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
 description = "Pick an Omarchy theme for Ghostty and a matching macOS wallpaper from one TUI"
 license = "MIT"

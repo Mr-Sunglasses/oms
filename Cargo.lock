@@ -1479,7 +1479,7 @@ dependencies = [
 
 [[package]]
 name = "oms"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "anyhow",
  "block2",

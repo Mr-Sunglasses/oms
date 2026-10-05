@@ -118,6 +118,10 @@ pub struct App {
     /// Thumbnails of the selected theme's wallpapers.
     pub thumbs: HashMap<PathBuf, StatefulProtocol>,
     thumbs_for: usize,
+    /// Size in cells of a thumbnail box's inside, set by the UI; thumbnails
+    /// are cropped to exactly this shape so they fill the box.
+    pub thumb_cells: (u16, u16),
+    thumbs_cropped_for: (u16, u16),
     /// Width / height of a terminal cell.
     pub cell_aspect: f64,
     /// Filled in by the UI each frame, for mouse clicks.
@@ -210,6 +214,8 @@ impl App {
             encoded,
             thumbs: HashMap::new(),
             thumbs_for: usize::MAX,
+            thumb_cells: (0, 0),
+            thumbs_cropped_for: (0, 0),
             list_inner: Rect::default(),
             wallpaper_area: Rect::default(),
             thumb_rects: Vec::new(),
@@ -775,16 +781,25 @@ impl App {
             ));
         }
 
-        // Thumbnails for the selected theme.
-        if self.thumbs_for != self.selected {
+        // Thumbnails for the selected theme, cropped to fill their boxes.
+        if self.thumbs_for != self.selected || self.thumbs_cropped_for != self.thumb_cells {
             self.thumbs.clear();
             self.thumbs_for = self.selected;
+            self.thumbs_cropped_for = self.thumb_cells;
         }
+        let (cols, rows) = self.thumb_cells;
+        if cols == 0 || rows == 0 {
+            return;
+        }
+        let font = self.picker.font_size();
+        let target = (cols as f64 * font.width as f64) / (rows as f64 * font.height.max(1) as f64);
         for path in self.themes[self.selected].wallpapers.clone() {
             if !self.thumbs.contains_key(&path)
                 && let Some(preview) = self.loader.get(&path)
             {
-                let protocol = self.picker.new_resize_protocol(preview.thumb.clone());
+                let protocol = self
+                    .picker
+                    .new_resize_protocol(crop_to_aspect(&preview.thumb, target));
                 self.thumbs.insert(path, protocol);
             }
         }
@@ -853,6 +868,18 @@ fn start_update_check(repos: &Repos, settings: &mut Settings) -> Option<Receiver
         }
     });
     Some(rx)
+}
+
+/// The largest centered part of `image` with the given width / height ratio.
+fn crop_to_aspect(image: &image::DynamicImage, aspect: f64) -> image::DynamicImage {
+    let (w, h) = (image.width() as f64, image.height() as f64);
+    if w / h > aspect {
+        let new_w = (h * aspect).round().max(1.0);
+        image.crop_imm(((w - new_w) / 2.0) as u32, 0, new_w as u32, h as u32)
+    } else {
+        let new_h = (w / aspect).round().max(1.0);
+        image.crop_imm(0, ((h - new_h) / 2.0) as u32, w as u32, new_h as u32)
+    }
 }
 
 fn same_file(a: &PathBuf, b: &PathBuf) -> bool {

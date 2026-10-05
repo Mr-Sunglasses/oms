@@ -42,7 +42,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_wallpaper(f, app, wallpaper, true);
     } else {
         let compact = body.width < MEDIUM || body.height < 30;
-        let list_width = if body.width < MEDIUM { 32 } else { 36 };
+        let list_width = if body.width < MEDIUM { 34 } else { 40 };
         let [left, right] =
             Layout::horizontal([Constraint::Length(list_width), Constraint::Min(0)]).areas(body);
         let preview_height = if compact { 4 } else { 12 };
@@ -83,11 +83,25 @@ fn draw_themes(f: &mut Frame, app: &mut App, area: Rect) {
                 Style::new()
             };
             let modes = app.mode_marks(t);
-            let swatches: Vec<Span> = [1, 2, 3, 4, 5, 6]
+            // Small squares with gaps; fewer of them when the list is narrow,
+            // so names keep room.
+            let colors: &[usize] = if width >= 2 + 1 + 16 + 2 + 1 + 11 {
+                &[1, 2, 3, 4, 5, 6]
+            } else {
+                &[1, 2, 4, 5]
+            };
+            let swatches: Vec<Span> = colors
                 .iter()
-                .map(|&i| Span::styled("█", Style::new().fg(rgb(t.palette[i]))))
+                .flat_map(|&i| {
+                    [
+                        Span::raw(" "),
+                        Span::styled("■", Style::new().fg(rgb(t.palette[i]))),
+                    ]
+                })
+                .skip(1)
                 .collect();
-            let name_width = width.saturating_sub(2 + 1 + 2 + swatches.len() + 1);
+            let swatch_width = colors.len() * 2 - 1;
+            let name_width = width.saturating_sub(2 + 1 + 2 + swatch_width + 1);
             let mut spans = vec![
                 applied,
                 mark,
@@ -286,6 +300,7 @@ fn draw_thumbs(f: &mut Frame, app: &mut App, theme: &crate::repo::Theme, area: R
     let cols = ((rows as f64 / app.cell_aspect) * 1.6).round() as u16;
     let width = cols + 2;
     let gap = 1;
+    app.thumb_cells = (cols, rows);
     let fits = ((area.width + gap) / (width + gap)).max(1) as usize;
     let count = theme.wallpapers.len();
     let selected = app.wallpaper[app.selected];
@@ -318,7 +333,12 @@ fn draw_thumbs(f: &mut Frame, app: &mut App, theme: &crate::repo::Theme, area: R
         let inner = block.inner(rect);
         f.render_widget(block, rect);
         match app.thumbs.get_mut(path) {
-            Some(protocol) => f.render_stateful_widget(StatefulImage::default(), inner, protocol),
+            // Scale up as well as down, so the cropped picture fills the box.
+            Some(protocol) => f.render_stateful_widget(
+                StatefulImage::default().resize(Resize::Scale(Some(FilterType::Triangle))),
+                inner,
+                protocol,
+            ),
             None => f.render_widget(
                 Paragraph::new("…").dark_gray().alignment(Alignment::Center),
                 inner,
