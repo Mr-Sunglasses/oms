@@ -17,6 +17,8 @@ jobs:
     runs-on: macos-latest
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
+      # Signing runs only once the Apple secrets exist (see README, "Releasing").
+      CAN_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +39,37 @@ jobs:
             target/aarch64-apple-darwin/release/oms \
             target/x86_64-apple-darwin/release/oms
           dist/oms --version
+
+      - name: Sign and notarize
+        if: env.CAN_SIGN == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(openssl rand -hex 16)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" dist/oms
+          codesign --verify --strict --verbose=2 dist/oms
+
+          # Notarize (a bare binary can't be stapled; Gatekeeper checks online).
+          ditto -c -k dist/oms "$RUNNER_TEMP/oms.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/oms.zip" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+
+      - name: Package
+        run: |
           tar -czf oms-macos-universal.tar.gz -C dist oms
           shasum -a 256 oms-macos-universal.tar.gz > oms-macos-universal.tar.gz.sha256
 

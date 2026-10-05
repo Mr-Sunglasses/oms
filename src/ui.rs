@@ -6,10 +6,10 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, List, ListItem, Padding, Paragraph};
+use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, Padding, Paragraph};
 use ratatui_image::{Resize, StatefulImage};
 
-use crate::app::{App, file_name};
+use crate::app::{App, Group, file_name};
 use crate::repo::{Rgb, Theme};
 
 fn rgb((r, g, b): Rgb) -> Color {
@@ -36,19 +36,27 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     draw_preview(f, app.theme(), preview);
     draw_wallpaper(f, app, wallpaper);
     draw_footer(f, app, footer);
+    if app.show_help {
+        draw_help(f);
+    }
 }
 
 fn draw_themes(f: &mut Frame, app: &mut App, area: Rect) {
     let width = area.width.saturating_sub(4) as usize;
     let items: Vec<ListItem> = app
-        .themes
+        .order
         .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            let marker = if app.is_applied_theme(t) {
-                Span::raw("● ").green()
+        .map(|&(i, group)| {
+            let t = &app.themes[i];
+            let applied = if app.is_applied_theme(t) {
+                Span::raw("●").green()
             } else {
-                Span::raw("  ")
+                Span::raw(" ")
+            };
+            let mark = match group {
+                Group::Favorite => Span::raw("★").yellow(),
+                Group::Recent => Span::raw("·").dark_gray(),
+                Group::Other => Span::raw(" "),
             };
             // Highlighted by hand so the swatches keep their colors.
             let name_style = if i == app.selected {
@@ -56,24 +64,39 @@ fn draw_themes(f: &mut Frame, app: &mut App, area: Rect) {
             } else {
                 Style::new()
             };
+            let modes = app.mode_marks(t);
             let swatches: Vec<Span> = [1, 2, 3, 4, 5, 6]
                 .iter()
                 .map(|&i| Span::styled("█", Style::new().fg(rgb(t.palette[i]))))
                 .collect();
-            let name_width = width.saturating_sub(2 + 1 + 1 + swatches.len() + 1);
+            let name_width = width.saturating_sub(2 + 1 + 2 + swatches.len() + 1);
             let mut spans = vec![
-                marker,
+                applied,
+                mark,
                 Span::styled(format!(" {:<name_width$.name_width$}", t.name), name_style),
+                Span::raw(format!("{modes:>2}")).yellow(),
                 Span::raw(" "),
             ];
             spans.extend(swatches);
             ListItem::new(Line::from(spans))
         })
         .collect();
-    let count = app.themes.len();
-    let list = List::new(items)
-        .block(panel(format!(" Themes · {count} ")).padding(Padding::horizontal(1)))
-        .scroll_padding(2);
+    let title = if app.filtering || !app.filter.is_empty() {
+        let cursor = if app.filtering { "▏" } else { "" };
+        format!(
+            " / {}{cursor} · {} of {} ",
+            app.filter,
+            app.order.len(),
+            app.themes.len()
+        )
+    } else {
+        format!(" Themes · {} ", app.themes.len())
+    };
+    let mut block = panel(title).padding(Padding::horizontal(1));
+    if app.order.is_empty() {
+        block = block.title_bottom(Line::from(" no match · esc clears ").centered().dark_gray());
+    }
+    let list = List::new(items).block(block).scroll_padding(2);
     f.render_stateful_widget(list, area, &mut app.list);
 }
 
@@ -226,20 +249,103 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         key("←→ "),
         text("wallpaper  "),
         key("enter "),
-        text("apply both  "),
-        key("t "),
-        text("theme only  "),
-        key("w "),
-        text("wallpaper only  "),
-        key("r "),
-        text("random  "),
+        text("apply  "),
+        key("f "),
+        text("favorite  "),
+        key("/ "),
+        text("filter  "),
+        key("L D "),
+        text("light/dark  "),
         key("p "),
-        text("live preview "),
+        text("live "),
         live,
         text("  "),
+        key("? "),
+        text("help  "),
         key("q "),
         text("quit"),
     ]);
-    let status = Line::from(format!(" {}", app.status)).dark_gray();
-    f.render_widget(Paragraph::new(vec![status, keys]), area);
+    let [status_area, update_area] = Layout::horizontal([
+        Constraint::Min(0),
+        Constraint::Length(
+            app.update_available
+                .as_ref()
+                .map_or(0, |v| v.len() as u16 + 36),
+        ),
+    ])
+    .areas(Rect { height: 1, ..area });
+    f.render_widget(
+        Paragraph::new(Line::from(format!(" {}", app.status)).dark_gray()),
+        status_area,
+    );
+    if let Some(version) = &app.update_available {
+        let notice = Line::from(vec![
+            Span::raw(format!("oms {version} is out: ")).yellow(),
+            Span::raw("oms self-update ").yellow().bold(),
+        ])
+        .right_aligned();
+        f.render_widget(Paragraph::new(notice), update_area);
+    }
+    f.render_widget(
+        Paragraph::new(keys),
+        Rect {
+            y: area.y + 1,
+            height: 1,
+            ..area
+        },
+    );
+}
+
+const HELP: &[(&str, &str)] = &[
+    ("↑ ↓  j k", "choose a theme"),
+    ("← →  h l", "choose one of its wallpapers"),
+    ("enter", "apply the theme and the wallpaper"),
+    ("t / w", "apply only the theme / only the wallpaper"),
+    ("r", "pick a random theme and wallpaper"),
+    ("f", "favorite: ★ at the top, · marks recently used"),
+    ("/", "filter by name; esc clears"),
+    (
+        "L / D",
+        "use this theme (and wallpaper) in light / dark mode",
+    ),
+    ("p", "live preview: Ghostty follows the selection"),
+    ("g / G", "first / last theme"),
+    ("q  esc", "quit (a live preview is undone)"),
+];
+
+const HELP_CLI: &[&str] = &[
+    "oms rotate 30m        rotate wallpapers",
+    "oms apps on nvim bat  theme other apps too",
+    "oms wallpapers add    use your own pictures",
+    "oms config install    Kanishk's Ghostty config",
+    "oms --help            everything else",
+];
+
+fn draw_help(f: &mut Frame) {
+    let area = f.area();
+    let width = 72.min(area.width.saturating_sub(4));
+    let height = (HELP.len() + HELP_CLI.len() + 6) as u16;
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height: height.min(area.height),
+    };
+    let mut lines: Vec<Line> = HELP
+        .iter()
+        .map(|(k, v)| {
+            Line::from(vec![
+                Span::raw(format!("{k:<11}")).blue().bold(),
+                Span::raw(*v),
+            ])
+        })
+        .collect();
+    lines.push(Line::raw(""));
+    lines.push(Line::raw("From the command line").bold());
+    lines.extend(HELP_CLI.iter().map(|l| Line::raw(*l).dark_gray()));
+    let block = panel(" Keys ")
+        .title_bottom(Line::from(" any key closes ").centered().dark_gray())
+        .padding(Padding::new(2, 2, 1, 0));
+    f.render_widget(Clear, popup);
+    f.render_widget(Paragraph::new(lines).block(block), popup);
 }

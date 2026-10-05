@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>oms · Omarchy themes for your Mac</title>
+<meta name="description" content="oms puts Omarchy's 22 themes on macOS: Ghostty, the wallpaper on every Space, and Neovim, btop, bat and tmux, with one key.">
+<meta property="og:title" content="oms · Omarchy themes for your Mac">
+<meta property="og:description" content="Ghostty theme, wallpaper and app colors, switched together with one key.">
+<meta property="og:image" content="https://raw.githubusercontent.com/Mr-Sunglasses/oms/main/docs/screenshot.png">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231a1b26'/><text x='16' y='22' font-family='monospace' font-size='15' font-weight='700' text-anchor='middle' fill='%237aa2f7'>oms</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  /* Colors come from the selected Omarchy theme (see themes.json);
+     these are Tokyo Night, used until the script runs. */
+  :root {
+    --bg: #1a1b26; --fg: #a9b1d6; --accent: #7aa2f7; --sel: #292e42; --cursor: #c0caf5;
+    --c0: #1a1b26; --c1: #f7768e; --c2: #9ece6a; --c3: #e0af68; --c4: #7aa2f7; --c5: #ad8ee6; --c6: #449dab; --c7: #a9b1d6;
+    --c8: #414868; --c9: #ff7a93; --c10: #b9f27c; --c11: #ff9e64; --c12: #7da6ff; --c13: #bb9af7; --c14: #0db9d7; --c15: #c0caf5;
+    --dim: color-mix(in srgb, var(--fg) 68%, var(--bg));
+    --line: color-mix(in srgb, var(--fg) 16%, var(--bg));
+    --panel: color-mix(in srgb, var(--fg) 5%, var(--bg));
+    color-scheme: dark;
+  }
+  :root[data-mode="light"] { color-scheme: light; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.7 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    transition: background-color .35s ease, color .35s ease;
+  }
+  ::selection { background: var(--sel); color: var(--cursor); }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  a:hover { border-bottom-color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 16px; }
+  header.top { display: flex; justify-content: space-between; align-items: center; padding: 22px 0; font-size: 13px; }
+  header.top nav { display: flex; gap: 18px; }
+  header.top nav a { color: var(--dim); border: 0; }
+  header.top nav a:hover { color: var(--accent); }
+  .brand { color: var(--fg); border: 0; font-weight: 700; }
+  .brand span { color: var(--accent); }
+
+  .hero { padding: 28px 0 8px; }
+  pre.logo { margin: 0 0 22px; color: var(--accent); font-size: 16px; line-height: 1.12; font-weight: 700; font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; }
+  h1 { font-size: clamp(22px, 4vw, 30px); line-height: 1.3; margin: 0 0 14px; color: var(--cursor); font-weight: 700; letter-spacing: -.01em; }
+  .lede { color: var(--dim); max-width: 62ch; margin: 0 0 26px; }
+
+  .install { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px 12px 16px; max-width: 100%; }
+  .install code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font: inherit; color: var(--fg); scrollbar-width: none; }
+  .install code::-webkit-scrollbar { display: none; }
+  .install .p { color: var(--c2); user-select: none; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .copy { flex: none; background: var(--accent); color: var(--bg); border: 0; border-radius: 7px; padding: 5px 12px; font-size: 13px; font-weight: 600; }
+  .copy:active { transform: translateY(1px); }
+  .small { font-size: 13px; color: var(--dim); margin: 10px 0 0; }
+
+  /* Theme picker */
+  .picker { margin: 46px 0 14px; }
+  .picker-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 13px; color: var(--dim); }
+  .picker-head b { color: var(--fg); font-weight: 600; }
+  .picker-head .keys { font-size: 12px; }
+  kbd { font: inherit; font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--fg); }
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+  .swatch { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); padding: 0; position: relative; overflow: hidden; transition: transform .15s ease; }
+  .swatch:hover { transform: translateY(-2px); }
+  .swatch i { position: absolute; inset: auto 0 0 0; height: 9px; display: flex; }
+  .swatch i span { flex: 1; }
+  .swatch[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .shuffle { height: 34px; border-radius: 9px; border: 1px dashed var(--line); background: none; padding: 0 12px; font-size: 12px; color: var(--dim); }
+  .shuffle:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Desktop preview: the theme's wallpaper with a terminal on top */
+  .desk { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--sel) center / cover no-repeat; border: 1px solid var(--line); box-shadow: 0 30px 60px -30px rgb(0 0 0 / .55); transition: background-image .3s ease; }
+  .desk img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .45s ease; }
+  .term { position: absolute; left: 7%; right: 7%; top: 11%; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 11px; border: 1px solid color-mix(in srgb, var(--fg) 14%, transparent); box-shadow: 0 24px 50px -12px rgb(0 0 0 / .5); font-size: clamp(9px, 1.55vw, 13.5px); line-height: 1.6; overflow: hidden; transition: background-color .35s ease; }
+  .bar { display: flex; align-items: center; gap: 7px; padding: 9px 12px; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .bar i:nth-child(1) { background: #ff5f57; } .bar i:nth-child(2) { background: #febc2e; } .bar i:nth-child(3) { background: #28c840; }
+  .bar span { margin-left: 8px; font-size: .9em; color: var(--dim); font-weight: 600; }
+  .screen { padding: 4px 16px 16px; white-space: pre; overflow: hidden; }
+  .b { font-weight: 700; }
+  .cur { background: var(--cursor); color: var(--bg); }
+  .pal { display: flex; margin-top: 4px; }
+  .pal span { width: 2.6em; height: 1.25em; }
+  .caption { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--dim); margin: 12px 2px 0; }
+  .caption b { color: var(--fg); }
+
+  section { padding: 56px 0 0; }
+  h2 { font-size: 15px; margin: 0 0 18px; color: var(--cursor); font-weight: 700; }
+  h2::before { content: "## "; color: var(--accent); }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+  .features li { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .features b { display: block; color: var(--fg); margin-bottom: 4px; }
+  .features p { margin: 0; color: var(--dim); font-size: 13.5px; line-height: 1.6; }
+  .features .k { color: var(--accent); }
+
+  pre.cmds { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; overflow-x: auto; font: inherit; font-size: 13.5px; line-height: 1.85; }
+  pre.cmds .c { color: var(--dim); }
+  pre.cmds .p { color: var(--c2); user-select: none; }
+
+  .prose p { color: var(--dim); max-width: 68ch; margin: 0 0 14px; }
+  .prose code, .notes code, .small code { color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: 13px; }
+
+  .notes { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--line); }
+  .notes li { position: relative; padding: 0 0 22px 22px; }
+  .notes li::before { content: ""; position: absolute; left: -5px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .notes time { display: block; font-size: 12px; color: var(--dim); }
+  .notes b { color: var(--fg); }
+  .notes p { margin: 2px 0 0; color: var(--dim); font-size: 14px; }
+
+  footer { margin: 72px 0 0; padding: 22px 0 40px; border-top: 1px solid var(--line); font-size: 13px; color: var(--dim); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  @media (max-width: 560px) {
+    body { font-size: 14px; }
+    pre.logo { font-size: 13px; }
+    .term { left: 4%; right: 4%; top: 8%; }
+    .screen { padding: 2px 10px 10px; }
+    .desk { aspect-ratio: 4 / 3.4; }
+  }
+  @media (max-width: 420px) { header.top nav a:first-child { display: none; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <a class="brand" href="#">oms<span>.</span></a>
+    <nav>
+      <a href="#install">install</a>
+      <a href="#commands">commands</a>
+      <a href="#notes">notes</a>
+      <a href="https://github.com/Mr-Sunglasses/oms">github</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+<pre class="logo" aria-hidden="true">  ___  _ __ ___  ___
+ / _ \| '_ ` _ \/ __|
+| (_) | | | | | \__ \
+ \___/|_| |_| |_|___/</pre>
+    <h1>Omarchy's themes, for your whole Mac.</h1>
+    <p class="lede">One key sets the Ghostty theme, the wallpaper on every Space, and the colors of Neovim, btop, bat and tmux. It can even follow light and dark mode on its own.</p>
+
+    <div class="install" id="install">
+      <code><span class="p">$ </span><span id="cmd">curl -fsSL https://kanishkk.xyz/oms | bash</span></code>
+      <button class="copy" type="button" data-copy="cmd">copy</button>
+    </div>
+    <p class="small">Then run <code>oms</code>. macOS on Apple silicon or Intel.</p>
+  </div>
+
+  <div class="picker">
+    <div class="picker-head">
+      <span>Try a theme: <b id="theme-name">Tokyo Night</b></span>
+      <span class="keys"><kbd>←</kbd> <kbd>→</kbd> to browse</span>
+    </div>
+    <div class="swatches" id="swatches" role="group" aria-label="Themes"></div>
+  </div>
+
+  <figure class="desk" style="margin:0">
+    <img id="wall" alt="" src="wallpapers/tokyo-night.jpg">
+    <div class="term" aria-label="A terminal in the selected theme">
+      <div class="bar"><i></i><i></i><i></i><span id="term-title">oms · Tokyo Night</span></div>
+<div class="screen"><span style="color:var(--c4)" class="b">~/code/omarchy</span> on <span style="color:var(--c5)"> main</span> <span style="color:var(--c3)">!2</span>
+<span style="color:var(--c2)">❯</span> ls
+<span style="color:var(--c4)" class="b">bin  config  themes</span>  <span style="color:var(--c2)">install.sh</span>  README.md  <span style="color:var(--c6)">logo.svg</span>  <span style="color:var(--c1)" class="b">backup.tar.gz</span>
+<span style="color:var(--c2)">❯</span> git log --oneline -2
+<span style="color:var(--c3)">4f2a91c</span> <span style="color:var(--c6)">(HEAD -&gt; </span><span style="color:var(--c2)">main</span><span style="color:var(--c6)">)</span> Add new theme
+<span style="color:var(--c3)">b81e0d7</span> <span style="color:var(--c8)">Initial commit</span>
+<span style="color:var(--c2)">❯</span> oms apply <span style="color:var(--c3)" id="term-slug">tokyo-night</span>
+<span style="color:var(--c2)">✓</span> Applied <span id="term-name">Tokyo Night</span> <span style="color:var(--c8)">(+ nvim, btop, bat, tmux)</span>
+<span style="color:var(--c2)">❯</span> <span class="cur"> </span>
+<div class="pal" id="pal0"></div><div class="pal" id="pal1"></div></div>
+    </div>
+  </figure>
+  <div class="caption"><span><b id="cap-name">Tokyo Night</b> · <span id="cap-mode">dark</span></span><span id="cap-walls">8 wallpapers</span></div>
+
+  <section>
+    <h2>What it does</h2>
+    <ul class="features">
+      <li><b>22 Omarchy themes</b><p>Every theme from Omarchy, ported to Ghostty with a matching app icon.</p></li>
+      <li><b>Live preview</b><p>Ghostty recolors as you move through the list. Quit and your theme comes back.</p></li>
+      <li><b>Wallpaper everywhere</b><p>Each theme's own wallpapers, set on every Space and display at once.</p></li>
+      <li><b>Light &amp; dark</b><p>Pick a day theme and a night theme with <span class="k">L</span> and <span class="k">D</span>. Your Mac switches them for you.</p></li>
+      <li><b>Your apps too</b><p>Neovim, btop, bat, tmux and the macOS accent color follow the theme.</p></li>
+      <li><b>Rotation</b><p><span class="k">oms rotate 30m</span> moves to the next wallpaper on a timer.</p></li>
+      <li><b>Favorites &amp; search</b><p><span class="k">f</span> stars a theme, <span class="k">/</span> filters, recent ones stay near the top.</p></li>
+      <li><b>Your wallpapers</b><p>Add your own pictures or folders to any theme.</p></li>
+    </ul>
+  </section>
+
+  <section id="commands">
+    <h2>Commands</h2>
+<pre class="cmds"><span class="p">$ </span>oms                                <span class="c"># the picker (press ? for keys)</span>
+<span class="p">$ </span>oms apply tokyo-night 3            <span class="c"># theme + its 3rd wallpaper</span>
+<span class="p">$ </span>oms auto catppuccin-latte nord     <span class="c"># follow light/dark mode</span>
+<span class="p">$ </span>oms rotate 30m                     <span class="c"># new wallpaper every 30 minutes</span>
+<span class="p">$ </span>oms apps on nvim btop bat tmux     <span class="c"># theme other apps too</span>
+<span class="p">$ </span>oms wallpapers add nord ~/Pictures <span class="c"># bring your own</span>
+<span class="p">$ </span>oms config install --only font     <span class="c"># parts of my Ghostty config</span>
+<span class="p">$ </span>oms self-update                    <span class="c"># get the latest oms</span></pre>
+  </section>
+
+  <section>
+    <h2>My Ghostty config</h2>
+    <div class="prose">
+      <p>oms ships with the Ghostty config I use every day: FiraCode Nerd Font, a little transparency and blur, a cursor that leaves a smooth trail, and keybindings for splits and tabs. <code>oms config install</code> sets it up and keeps a backup of yours. You can also take just some of it: <code>oms config install --only font,keybindings</code>.</p>
+    </div>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <!-- New notes go at the top. Copy an <li> and change the date and text. -->
+    <ul class="notes">
+      <li><time datetime="2026-10-05">5 Oct 2026</time><b>oms 0.5</b><p>Light/dark switching, wallpaper rotation, Neovim/btop/bat/tmux themes, favorites, search, your own wallpapers, and config presets you can take in parts.</p></li>
+      <li><time datetime="2026-10-05">5 Oct 2026</time><b>oms 0.4</b><p><code>oms config install</code>: my Ghostty config in one command.</p></li>
+      <li><time datetime="2026-10-05">5 Oct 2026</time><b>oms 0.2</b><p>Wallpapers now change on every Space, not just the current one.</p></li>
+      <li><time datetime="2026-10-05">5 Oct 2026</time><b>Hello, oms</b><p>Omarchy themes for Ghostty and matching wallpapers, from one TUI.</p></li>
+    </ul>
+  </section>
+
+  <footer>
+    <span>Made by <a href="https://github.com/Mr-Sunglasses">Kanishk</a> · MIT</span>
+    <span>Themes &amp; wallpapers from <a href="https://github.com/omacom/omarchy">Omarchy</a> and their artists</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get() { try { return localStorage.getItem("oms-theme"); } catch { return null; } },
+    set(v) { try { localStorage.setItem("oms-theme", v); } catch {} },
+  };
+  let themes = [];
+  let current = 0;
+
+  function apply(i, remember) {
+    current = (i + themes.length) % themes.length;
+    const t = themes[current];
+    const vars = { bg: t.bg, fg: t.fg, accent: t.accent, sel: t.selection, cursor: t.cursor };
+    t.palette.forEach((c, n) => (vars["c" + n] = c));
+    for (const [k, v] of Object.entries(vars)) root.style.setProperty("--" + k, v);
+    root.dataset.mode = t.mode;
+    document.querySelector('meta[name="color-scheme"]').content = t.mode;
+
+    const img = $("wall");
+    const next = new Image();
+    next.onload = () => { img.style.opacity = 0; setTimeout(() => { img.src = next.src; img.style.opacity = 1; }, 180); };
+    next.src = "wallpapers/" + t.slug + ".jpg";
+
+    for (const id of ["theme-name", "cap-name", "term-name"]) $(id).textContent = t.name;
+    $("term-title").textContent = "oms · " + t.name;
+    $("term-slug").textContent = t.slug;
+    $("cap-mode").textContent = t.mode;
+    $("cap-walls").textContent = t.wallpapers + (t.wallpapers === 1 ? " wallpaper" : " wallpapers");
+    document.querySelectorAll(".swatch").forEach((b, n) => b.setAttribute("aria-pressed", n === current));
+    if (remember) store.set(t.slug);
+  }
+
+  function palette() {
+    for (const row of [0, 1]) {
+      const el = $("pal" + row);
+      for (let n = 0; n < 8; n++) {
+        const s = document.createElement("span");
+        s.style.background = "var(--c" + (row * 8 + n) + ")";
+        el.appendChild(s);
+      }
+    }
+  }
+
+  function swatches() {
+    const box = $("swatches");
+    themes.forEach((t, i) => {
+      const b = document.createElement("button");
+      b.className = "swatch";
+      b.type = "button";
+      b.title = t.name;
+      b.setAttribute("aria-label", t.name);
+      b.style.background = t.bg;
+      const strip = document.createElement("i");
+      for (const n of [1, 2, 3, 4, 5, 6]) {
+        const s = document.createElement("span");
+        s.style.background = t.palette[n];
+        strip.appendChild(s);
+      }
+      b.appendChild(strip);
+      b.addEventListener("click", () => apply(i, true));
+      box.appendChild(b);
+    });
+    const shuffle = document.createElement("button");
+    shuffle.className = "shuffle";
+    shuffle.type = "button";
+    shuffle.textContent = "random";
+    shuffle.addEventListener("click", () => {
+      let i = current;
+      while (themes.length > 1 && i === current) i = Math.floor(Math.random() * themes.length);
+      apply(i, true);
+    });
+    box.appendChild(shuffle);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (!themes.length || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "ArrowRight") apply(current + 1, true);
+    if (e.key === "ArrowLeft") apply(current - 1, true);
+  });
+
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const text = $(btn.dataset.copy).textContent;
+      try { await navigator.clipboard.writeText(text); }
+      catch {
+        const range = document.createRange();
+        range.selectNodeContents($(btn.dataset.copy));
+        const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        document.execCommand("copy");
+      }
+      btn.textContent = "copied";
+      setTimeout(() => (btn.textContent = "copy"), 1400);
+    });
+  });
+
+  palette();
+  fetch("themes.json")
+    .then((r) => r.json())
+    .then((data) => {
+      themes = data;
+      swatches();
+      // ?theme=nord opens the page in that theme (handy for sharing).
+      const saved = new URLSearchParams(location.search).get("theme") || store.get();
+      const fallback = matchMedia("(prefers-color-scheme: light)").matches ? "catppuccin-latte" : "tokyo-night";
+      const i = themes.findIndex((t) => t.slug === (saved || fallback));
+      apply(i < 0 ? 0 : i, false);
+    })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>

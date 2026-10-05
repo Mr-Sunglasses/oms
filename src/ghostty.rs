@@ -37,6 +37,20 @@ pub fn install_themes(repo: &Path) -> Result<usize> {
     Ok(changed)
 }
 
+/// Removes the Omarchy theme files that `install_themes` added.
+pub fn remove_themes() -> Result<usize> {
+    let mut removed = 0;
+    if let Ok(entries) = fs::read_dir(config_home().join("themes")) {
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with("Omarchy ") {
+                fs::remove_file(entry.path())?;
+                removed += 1;
+            }
+        }
+    }
+    Ok(removed)
+}
+
 /// The config file that decides the theme: the last one Ghostty loads that sets
 /// `theme`, else the first existing one, else a new `~/.config/ghostty/config`.
 pub fn config_path() -> PathBuf {

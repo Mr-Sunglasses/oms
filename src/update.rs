@@ -9,6 +9,13 @@ use anyhow::{Context, Result, bail};
 const REPO: &str = "Mr-Sunglasses/oms";
 const ASSET: &str = "oms-macos-universal.tar.gz";
 
+/// The newer release's version, if there is one.
+pub fn available() -> Option<String> {
+    let tag = latest_tag().ok()?;
+    let latest = tag.trim_start_matches('v');
+    is_newer(latest, env!("CARGO_PKG_VERSION")).then(|| latest.to_string())
+}
+
 pub fn self_update() -> Result<()> {
     let current = env!("CARGO_PKG_VERSION");
     let tag = latest_tag()?;
@@ -52,7 +59,7 @@ pub fn self_update() -> Result<()> {
 }
 
 /// The newest release tag, from where /releases/latest redirects to.
-fn latest_tag() -> Result<String> {
+pub fn latest_tag() -> Result<String> {
     let url = format!("https://github.com/{REPO}/releases/latest");
     let out = Command::new("curl")
         .args(["-fsSLI", "-o", "/dev/null", "-w", "%{url_effective}", &url])
@@ -68,7 +75,7 @@ fn latest_tag() -> Result<String> {
     }
 }
 
-fn is_newer(latest: &str, current: &str) -> bool {
+pub fn is_newer(latest: &str, current: &str) -> bool {
     let parse = |v: &str| -> Vec<u64> { v.split('.').map(|p| p.parse().unwrap_or(0)).collect() };
     parse(latest) > parse(current)
 }

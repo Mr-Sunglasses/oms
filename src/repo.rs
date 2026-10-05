@@ -6,6 +6,8 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
+use crate::settings::{Settings, data_dir};
+
 pub const THEMES_URL: &str = "https://github.com/Mr-Sunglasses/ghostty-omarchy-themes";
 pub const WALLPAPERS_URL: &str = "https://github.com/Mr-Sunglasses/omarchy-wallpapers";
 
@@ -22,13 +24,30 @@ pub struct Theme {
     pub foreground: Rgb,
     pub cursor: Rgb,
     pub palette: [Rgb; 16],
+    /// The theme's accent (its split divider color).
+    pub accent: Rgb,
+    /// Omarchy's wallpapers first, then the user's own.
     pub wallpapers: Vec<PathBuf>,
+    /// How many of `wallpapers` come from Omarchy.
+    pub builtin_wallpapers: usize,
+    /// Matching Neovim, btop, bat and tmux themes.
+    pub apps_dir: PathBuf,
 }
 
 impl Theme {
     pub fn is_light(&self) -> bool {
         let (r, g, b) = self.background;
         0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32 > 128.0
+    }
+
+    pub fn is_custom_wallpaper(&self, index: usize) -> bool {
+        index >= self.builtin_wallpapers
+    }
+
+    /// Case-insensitive substring match on the name or slug, for filtering.
+    pub fn contains(&self, query: &str) -> bool {
+        let q = query.to_lowercase();
+        self.name.to_lowercase().contains(&q) || self.slug.contains(&q)
     }
 
     pub fn matches(&self, query: &str) -> bool {
@@ -39,6 +58,7 @@ impl Theme {
     }
 }
 
+#[derive(Clone)]
 pub struct Repos {
     pub themes: PathBuf,
     pub wallpapers: PathBuf,
@@ -47,9 +67,7 @@ pub struct Repos {
 impl Repos {
     /// Uses the given checkouts, or clones into the app's data directory.
     pub fn locate(themes: Option<PathBuf>, wallpapers: Option<PathBuf>) -> Result<Self> {
-        let data = dirs::data_dir()
-            .context("no data directory")?
-            .join("omarchy-switch");
+        let data = data_dir();
         let repos = Repos {
             themes: themes.unwrap_or_else(|| data.join("ghostty-omarchy-themes")),
             wallpapers: wallpapers.unwrap_or_else(|| data.join("omarchy-wallpapers")),
@@ -76,16 +94,18 @@ impl Repos {
         Ok(repos)
     }
 
-    /// Pulls the latest themes and wallpapers.
-    pub fn update(&self) -> Result<()> {
+    /// Pulls the latest themes and wallpapers. Returns whether anything changed.
+    pub fn update(&self) -> Result<bool> {
+        let mut changed = false;
         for dir in [&self.themes, &self.wallpapers] {
-            eprintln!("Updating {} ...", dir.display());
+            let before = head(dir);
             git(Some(dir), &["pull", "--quiet", "--ff-only"])?;
+            changed |= head(dir) != before;
         }
-        Ok(())
+        Ok(changed)
     }
 
-    pub fn load(&self) -> Result<Vec<Theme>> {
+    pub fn load(&self, settings: &Settings) -> Result<Vec<Theme>> {
         let dir = self.themes.join("themes");
         let mut themes = Vec::new();
         for entry in fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))? {
@@ -96,7 +116,12 @@ impl Repos {
                 .to_string_lossy()
                 .into_owned();
             if file_name.starts_with("Omarchy ") {
-                themes.push(parse_theme(&path, &file_name, &self.wallpapers)?);
+                let mut theme = parse_theme(&path, &file_name, &self.wallpapers)?;
+                theme.apps_dir = self.themes.join("apps").join(&theme.slug);
+                if let Some(extra) = settings.custom_wallpapers.get(&theme.slug) {
+                    theme.wallpapers.extend(expand_wallpapers(extra));
+                }
+                themes.push(theme);
             }
         }
         if themes.is_empty() {
@@ -107,14 +132,61 @@ impl Repos {
     }
 }
 
+/// Image files in `paths`, which can be files or folders.
+pub fn expand_wallpapers(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            let mut files: Vec<PathBuf> = fs::read_dir(path)
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| is_image(p))
+                .collect();
+            files.sort();
+            out.extend(files);
+        } else if is_image(path) {
+            out.push(path.clone());
+        }
+    }
+    out
+}
+
+pub fn is_image(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_lowercase();
+    matches!(
+        ext.as_str(),
+        "jpg" | "jpeg" | "png" | "heic" | "webp" | "tiff" | "gif"
+    )
+}
+
+fn head(dir: &Path) -> Option<Vec<u8>> {
+    Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .map(|o| o.stdout)
+}
+
+/// Runs git without printing anything (it may run behind the TUI).
 fn git(dir: Option<&Path>, args: &[&str]) -> Result<()> {
     let mut cmd = Command::new("git");
     if let Some(dir) = dir {
         cmd.arg("-C").arg(dir);
     }
-    let status = cmd.args(args).status().context("running git")?;
-    if !status.success() {
-        bail!("git {} failed", args.join(" "));
+    let out = cmd.args(args).output().context("running git")?;
+    if !out.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
     Ok(())
 }
@@ -129,7 +201,10 @@ fn parse_theme(path: &Path, file_name: &str, wallpapers: &Path) -> Result<Theme>
         foreground: (255, 255, 255),
         cursor: (255, 255, 255),
         palette: [(128, 128, 128); 16],
+        accent: (128, 128, 255),
         wallpapers: Vec::new(),
+        builtin_wallpapers: 0,
+        apps_dir: PathBuf::new(),
     };
     for line in text.lines() {
         if let Some(rest) = line.split("Omarchy theme '").nth(1) {
@@ -143,6 +218,7 @@ fn parse_theme(path: &Path, file_name: &str, wallpapers: &Path) -> Result<Theme>
             "background" => theme.background = hex(value).unwrap_or(theme.background),
             "foreground" => theme.foreground = hex(value).unwrap_or(theme.foreground),
             "cursor-color" => theme.cursor = hex(value).unwrap_or(theme.cursor),
+            "split-divider-color" => theme.accent = hex(value).unwrap_or(theme.accent),
             "palette" => {
                 if let Some((i, color)) = value.split_once('=')
                     && let (Ok(i), Some(color)) = (i.trim().parse::<usize>(), hex(color.trim()))
@@ -160,17 +236,11 @@ fn parse_theme(path: &Path, file_name: &str, wallpapers: &Path) -> Result<Theme>
     if let Ok(entries) = fs::read_dir(wallpapers.join(&theme.slug)) {
         theme.wallpapers = entries
             .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| {
-                let ext = p
-                    .extension()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_lowercase();
-                matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "heic")
-            })
+            .filter(|p| is_image(p))
             .collect();
         theme.wallpapers.sort();
     }
+    theme.builtin_wallpapers = theme.wallpapers.len();
     Ok(theme)
 }
 
