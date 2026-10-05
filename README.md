@@ -2,7 +2,7 @@
 
 Omarchy's themes, for your whole Mac. Pick one of the 22 [Omarchy](https://github.com/omacom/omarchy) themes and `oms` applies it everywhere at once: the [Ghostty](https://ghostty.org) theme, the wallpaper on every Space, and the colors of Neovim, btop, bat and tmux. It can also follow light and dark mode on its own.
 
-**Website:** [mr-sunglasses.github.io/oms](https://mr-sunglasses.github.io/oms/)
+**Website:** [oms.kanishkk.xyz](https://oms.kanishkk.xyz)
 
 ![oms showing Tokyo Night](docs/screenshot.png)
 
