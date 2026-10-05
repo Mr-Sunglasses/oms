@@ -1,5 +1,6 @@
 //! Applying themes and wallpapers, shared by the TUI, the CLI and the agent.
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -46,10 +47,10 @@ pub fn record_theme(theme: &Theme, settings: &mut Settings) -> Result<String> {
 fn apps_text((done, failed): (Vec<String>, Vec<String>)) -> String {
     let mut text = String::new();
     if !done.is_empty() {
-        text.push_str(&format!(" (+ {})", done.join(", ")));
+        let _ = write!(text, " (+ {})", done.join(", "));
     }
     if !failed.is_empty() {
-        text.push_str(&format!(". Couldn't theme {}", failed.join("; ")));
+        let _ = write!(text, ". Couldn't theme {}", failed.join("; "));
     }
     text
 }
@@ -86,27 +87,24 @@ pub fn set_mode_theme(
         settings.light = Some(choice);
     }
     let mode = if dark { "dark" } else { "light" };
-    let message = match (&settings.light, &settings.dark) {
-        (Some(light), Some(dark_choice)) => {
-            settings.auto = true;
-            let light_theme = find(themes, &light.theme)?;
-            let dark_theme = find(themes, &dark_choice.theme)?;
-            ghostty::set_theme(
-                &ghostty::config_path(),
-                &format!(
-                    "light:{},dark:{}",
-                    light_theme.ghostty_name, dark_theme.ghostty_name
-                ),
-            )?;
-            format!(
-                "{name} is the {mode} theme. Following macOS: {} by day, {} by night",
-                light_theme.name, dark_theme.name
-            )
-        }
-        _ => {
-            let other = if dark { "light (L)" } else { "dark (D)" };
-            format!("{name} is the {mode} theme. Now pick a {other} theme")
-        }
+    let message = if let (Some(light), Some(dark_choice)) = (&settings.light, &settings.dark) {
+        settings.auto = true;
+        let light_theme = find(themes, &light.theme)?;
+        let dark_theme = find(themes, &dark_choice.theme)?;
+        ghostty::set_theme(
+            &ghostty::config_path(),
+            &format!(
+                "light:{},dark:{}",
+                light_theme.ghostty_name, dark_theme.ghostty_name
+            ),
+        )?;
+        format!(
+            "{name} is the {mode} theme. Following macOS: {} by day, {} by night",
+            light_theme.name, dark_theme.name
+        )
+    } else {
+        let other = if dark { "light (L)" } else { "dark (D)" };
+        format!("{name} is the {mode} theme. Now pick a {other} theme")
     };
     settings.save()?;
     daemon::sync(settings)?;

@@ -1,7 +1,8 @@
-//! The background agent (a LaunchAgent running `oms daemon`). It switches the
+//! The background agent (a `LaunchAgent` running `oms daemon`). It switches the
 //! wallpaper and app themes when macOS changes between light and dark, and
 //! rotates wallpapers. Ghostty switches its own theme (`theme = light:…,dark:…`).
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -122,13 +123,11 @@ fn environment() -> String {
     .filter_map(|k| std::env::var(k).ok().map(|v| (*k, v)))
     .collect();
     vars.push(("PATH", path));
-    let entries: String = vars
-        .iter()
-        .map(|(k, v)| {
-            let v = v.replace('&', "&amp;").replace('<', "&lt;");
-            format!("    <key>{k}</key><string>{v}</string>\n")
-        })
-        .collect();
+    let entries = vars.iter().fold(String::new(), |mut out, (k, v)| {
+        let v = v.replace('&', "&amp;").replace('<', "&lt;");
+        let _ = writeln!(out, "    <key>{k}</key><string>{v}</string>");
+        out
+    });
     format!("  <key>EnvironmentVariables</key>\n  <dict>\n{entries}  </dict>\n")
 }
 
@@ -200,6 +199,7 @@ fn log(message: &str) {
 /// Tells the agent (if it's running) to reread the settings.
 pub fn post_settings_changed() {
     let center = NSDistributedNotificationCenter::defaultCenter();
+    // SAFETY: a valid notification name with no object or user info, which the API allows.
     unsafe {
         center.postNotificationName_object_userInfo_deliverImmediately(
             &NSString::from_str(SETTINGS_CHANGED),
@@ -220,6 +220,8 @@ fn observe(flag: &Arc<AtomicBool>) -> Vec<Retained<ProtocolObject<dyn NSObjectPr
             let block = RcBlock::new(move |_: NonNull<NSNotification>| {
                 flag.store(true, Ordering::SeqCst);
             });
+            // SAFETY: the block only stores to an `AtomicBool`, so it is fine to run
+            // on whatever thread delivers the notification (the queue is nil).
             unsafe {
                 center.addObserverForName_object_queue_usingBlock(
                     Some(&NSString::from_str(name)),
@@ -237,6 +239,8 @@ fn wait(timeout: Duration, flag: &AtomicBool) {
     let started = Instant::now();
     let until = NSDate::dateWithTimeIntervalSinceNow(timeout.as_secs_f64());
     let run_loop = NSRunLoop::currentRunLoop();
+    // SAFETY: `NSDefaultRunLoopMode` is a constant string exported by Foundation;
+    // reading the extern static is all that's unsafe here.
     unsafe { run_loop.runMode_beforeDate(NSDefaultRunLoopMode, &until) };
     // Guard against a run loop with nothing to wait on returning at once.
     if !flag.load(Ordering::SeqCst) && started.elapsed() < Duration::from_millis(10) {

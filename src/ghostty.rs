@@ -8,8 +8,10 @@ use anyhow::{Context, Result};
 
 fn config_home() -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".config"))
+        .map_or_else(
+            || dirs::home_dir().unwrap_or_default().join(".config"),
+            PathBuf::from,
+        )
         .join("ghostty")
 }
 

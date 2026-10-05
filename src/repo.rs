@@ -38,7 +38,7 @@ pub struct Theme {
 impl Theme {
     pub fn is_light(&self) -> bool {
         let (r, g, b) = self.background;
-        0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32 > 128.0
+        0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b) > 128.0
     }
 
     pub fn is_custom_wallpaper(&self, index: usize) -> bool {

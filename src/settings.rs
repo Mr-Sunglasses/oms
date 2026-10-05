@@ -58,9 +58,10 @@ pub struct Choice {
 
 /// Where oms keeps its downloads and settings (`OMS_DATA_DIR` overrides it).
 pub fn data_dir() -> PathBuf {
-    std::env::var_os("OMS_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| dirs::data_dir().unwrap_or_default().join("omarchy-switch"))
+    std::env::var_os("OMS_DATA_DIR").map_or_else(
+        || dirs::data_dir().unwrap_or_default().join("omarchy-switch"),
+        PathBuf::from,
+    )
 }
 
 fn path() -> PathBuf {

@@ -1,6 +1,7 @@
 //! `oms config`: install Kanishk's opinionated Ghostty config (all of it, or
 //! just some sections), or undo it.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -66,15 +67,14 @@ pub fn sections() -> Vec<Section> {
         .map(|(n, &start)| {
             let end = starts.get(n + 1).copied().unwrap_or(lines.len());
             let title = lines[start + 1].trim_start_matches('#').trim().to_string();
-            let id = SECTION_IDS
-                .iter()
-                .find(|(t, _)| *t == title)
-                .map(|(_, id)| id.to_string())
-                .unwrap_or_else(|| {
+            let id = SECTION_IDS.iter().find(|(t, _)| *t == title).map_or_else(
+                || {
                     title
                         .to_lowercase()
                         .replace(|c: char| !c.is_alphanumeric(), "-")
-                });
+                },
+                |(_, id)| (*id).to_string(),
+            );
             Section {
                 id,
                 title,
@@ -111,20 +111,19 @@ pub fn run(args: &[String]) -> Result<()> {
             }
             Ok(())
         }
-        Some("show") => match args.get(1) {
-            Some(id) => {
+        Some("show") => {
+            if let Some(id) = args.get(1) {
                 let s = sections()
                     .into_iter()
                     .find(|s| &s.id == id)
                     .with_context(|| format!("no section {id:?} (see `oms config sections`)"))?;
                 println!("{}", s.text);
                 Ok(())
-            }
-            None => {
+            } else {
                 print!("{CONFIG}");
                 Ok(())
             }
-        },
+        }
         None => {
             print!("{CONFIG}");
             Ok(())
@@ -214,7 +213,7 @@ fn merge_section(text: &str, section: &Section) -> String {
                     || (key == "keybind" && trigger(v) == trigger(value)))
         })
     };
-    for line in lines.iter_mut() {
+    for line in &mut lines {
         if let Some((key, value)) = setting(line)
             && replaced(&key, &value)
         {
@@ -223,7 +222,7 @@ fn merge_section(text: &str, section: &Section) -> String {
     }
 
     let mut out = lines.join("\n").trim_end().to_string();
-    out.push_str(&format!("\n\n{start}\n{}\n{end}\n", section.text));
+    let _ = write!(out, "\n\n{start}\n{}\n{end}\n", section.text);
     out
 }
 
@@ -240,10 +239,7 @@ fn setting(line: &str) -> Option<(String, String)> {
 /// The keys of a keybind value: `cmd+shift+r=new_split:right` -> `cmd+shift+r`.
 fn trigger(value: &str) -> &str {
     // Triggers never contain '=' (that key is spelled `equal`); actions can.
-    value
-        .split_once('=')
-        .map(|(t, _)| t.trim())
-        .unwrap_or(value)
+    value.split_once('=').map_or(value, |(t, _)| t.trim())
 }
 
 /// Backs up the old config and writes the new one.
@@ -327,7 +323,7 @@ fn font_installed() -> bool {
         .iter()
         .filter_map(|d| fs::read_dir(d).ok())
         .flatten()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .any(|e| {
             e.file_name()
                 .to_string_lossy()

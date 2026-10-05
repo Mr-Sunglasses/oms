@@ -28,9 +28,10 @@ pub fn is_known(app: &str) -> bool {
 }
 
 fn config_home() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".config"))
+    std::env::var_os("XDG_CONFIG_HOME").map_or_else(
+        || dirs::home_dir().unwrap_or_default().join(".config"),
+        PathBuf::from,
+    )
 }
 
 fn on_path(program: &str) -> bool {
@@ -204,7 +205,9 @@ fn tmux(theme: &Theme) -> Result<()> {
         if !text.is_empty() && !text.ends_with('\n') {
             text.push('\n');
         }
-        text.push_str(&format!("# Colors from oms (Omarchy themes)\n{line}\n"));
+        text.push_str("# Colors from oms (Omarchy themes)\n");
+        text.push_str(&line);
+        text.push('\n');
         write(&conf, &text)?;
     }
     // Recolor running tmux sessions right away; fine if none are running.
@@ -212,7 +215,7 @@ fn tmux(theme: &Theme) -> Result<()> {
     Ok(())
 }
 
-/// macOS's accent colors: (AppleAccentColor value, hue in degrees).
+/// macOS's accent colors: (`AppleAccentColor` value, hue in degrees).
 const ACCENTS: &[(i32, f32)] = &[
     (0, 0.0),   // red
     (1, 30.0),  // orange
@@ -226,11 +229,15 @@ const ACCENTS: &[(i32, f32)] = &[
 
 /// The macOS accent closest to `color`; -1 (graphite) for greys.
 pub fn nearest_accent((r, g, b): Rgb) -> i32 {
-    let (r, g, b) = (r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
+    let (r, g, b) = (
+        f32::from(r) / 255.0,
+        f32::from(g) / 255.0,
+        f32::from(b) / 255.0,
+    );
     let max = r.max(g).max(b);
     let min = r.min(g).min(b);
     let delta = max - min;
-    let lightness = (max + min) / 2.0;
+    let lightness = f32::midpoint(max, min);
     let saturation = if delta == 0.0 {
         0.0
     } else {
@@ -239,6 +246,8 @@ pub fn nearest_accent((r, g, b): Rgb) -> i32 {
     if saturation < 0.18 || delta < 0.08 {
         return -1;
     }
+    // `max` is exactly one of r, g, b, so these comparisons are exact.
+    #[allow(clippy::float_cmp)]
     let hue = if max == r {
         60.0 * (((g - b) / delta).rem_euclid(6.0))
     } else if max == g {
@@ -249,8 +258,7 @@ pub fn nearest_accent((r, g, b): Rgb) -> i32 {
     ACCENTS
         .iter()
         .min_by(|a, b| (a.1 - hue).abs().total_cmp(&(b.1 - hue).abs()))
-        .map(|a| a.0)
-        .unwrap_or(4)
+        .map_or(4, |a| a.0)
 }
 
 fn accent(color: Rgb) -> Result<()> {
@@ -283,6 +291,8 @@ fn notify_accent_changed() {
         "AppleColorPreferencesChangedNotification",
         "AppleAquaColorVariantChanged",
     ] {
+        // SAFETY: a valid notification name with no object or user info, which
+        // the API allows; posting a distributed notification has no other preconditions.
         unsafe {
             center.postNotificationName_object_userInfo_deliverImmediately(
                 &NSString::from_str(name),

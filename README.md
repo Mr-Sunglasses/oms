@@ -88,7 +88,19 @@ cargo run                 # run the picker
 cargo test                # run the tests
 ```
 
-CI checks formatting (`cargo fmt`), lints (`cargo clippy`) and tests on every pull request.
+CI runs these on every pull request, so run them before you push:
+
+```sh
+cargo fmt                                    # formatting (rules in rustfmt.toml)
+cargo clippy --all-targets -- -D warnings    # lints, including clippy's pedantic set (see [lints] in Cargo.toml)
+cargo test
+```
+
+Code style:
+- Keep each file to one job and under about 400 lines; split a growing one into a folder of modules (like `src/app/` and `src/ui/`).
+- Keep functions under 100 lines (clippy enforces this).
+- Every `unsafe` block gets a `// SAFETY:` comment saying why it's sound (also enforced).
+- Comments explain *why*; names explain *what*.
 
 - **Code:** `src/`. The picker is in `app.rs` and `ui.rs`; theme, wallpaper and app changes are in `ghostty.rs`, `wallpaper.rs` and `apps.rs`.
 - **Themes and wallpapers** come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers); change them there.

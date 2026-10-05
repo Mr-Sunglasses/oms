@@ -1,6 +1,6 @@
 [package]
 name = "oms"
-version = "0.6.3"
+version = "0.7.0"
 edition = "2024"
 description = "Pick an Omarchy theme for Ghostty and a matching macOS wallpaper from one TUI"
 license = "MIT"
@@ -28,3 +28,24 @@ plist = "1.10.1"
 [profile.release]
 lto = "thin"
 strip = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Every unsafe block says why it's sound.
+undocumented_unsafe_blocks = "warn"
+dbg_macro = "warn"
+todo = "warn"
+# Terminal geometry converts small, positive cell and pixel counts between
+# integer and float types all the time; these casts can't overflow here.
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+cast_possible_wrap = "allow"
+# oms is an app, not a library: there's no public API to document or mark.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"

@@ -65,7 +65,16 @@ pub fn self_update() -> Result<bool> {
 pub fn latest_tag() -> Result<String> {
     let url = format!("https://github.com/{REPO}/releases/latest");
     let out = Command::new("curl")
-        .args(["-fsSLI", "-o", "/dev/null", "-w", "%{url_effective}", &url])
+        .args([
+            "-fsSLI",
+            "--max-time",
+            "10",
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{url_effective}",
+            &url,
+        ])
         .output()
         .context("running curl")?;
     if !out.status.success() {

@@ -144,7 +144,7 @@ fn cache_path(path: &Path) -> PathBuf {
 
 fn decode(path: &Path) -> Result<DynamicImage, String> {
     ImageReader::open(path)
-        .and_then(|r| r.with_guessed_format())
+        .and_then(ImageReader::with_guessed_format)
         .map_err(|e| e.to_string())?
         .decode()
         .map_err(|e| e.to_string())
@@ -154,19 +154,18 @@ fn decode(path: &Path) -> Result<DynamicImage, String> {
 /// shrinks it and caches that.
 fn load(path: &Path) -> Result<Preview, String> {
     let cached = cache_path(path);
-    let image = match decode(&cached) {
-        Ok(image) => image,
-        Err(_) => {
-            let full = decode(path)?;
-            let small = if full.width() > PREVIEW_SIZE.0 || full.height() > PREVIEW_SIZE.1 {
-                full.thumbnail(PREVIEW_SIZE.0, PREVIEW_SIZE.1)
-            } else {
-                full
-            };
-            let small = DynamicImage::ImageRgb8(small.to_rgb8());
-            save(&small, &cached);
-            small
-        }
+    let image = if let Ok(image) = decode(&cached) {
+        image
+    } else {
+        let full = decode(path)?;
+        let small = if full.width() > PREVIEW_SIZE.0 || full.height() > PREVIEW_SIZE.1 {
+            full.thumbnail(PREVIEW_SIZE.0, PREVIEW_SIZE.1)
+        } else {
+            full
+        };
+        let small = DynamicImage::ImageRgb8(small.to_rgb8());
+        save(&small, &cached);
+        small
     };
     let thumb = image.thumbnail(THUMB_SIZE.0, THUMB_SIZE.1);
     Ok(Preview {

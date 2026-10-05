@@ -4,12 +4,11 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::Result;
-
 use crate::repo::Repos;
 use crate::settings::{Settings, data_dir};
 use crate::{apps, daemon, ghostty, update};
 
+#[derive(Clone, Copy)]
 enum Level {
     Ok,
     Warn,
@@ -47,11 +46,34 @@ fn run(program: &str, args: &[&str]) -> Option<String> {
     )
 }
 
-pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
+pub fn run_checks(repos: Option<&Repos>) {
     let mut r = Report { problems: 0 };
     let settings = Settings::load();
+    let config = ghostty::config_path();
 
-    // oms itself.
+    check_oms(&mut r);
+    let ghostty_bin = check_ghostty(&mut r);
+    check_config(&mut r, ghostty_bin, &config);
+    check_font(&mut r, ghostty_bin, &config);
+    check_downloads(&mut r, repos);
+    check_wallpapers(&mut r);
+    check_agent(&mut r, &settings);
+    check_apps(&mut r, &settings);
+
+    println!();
+    if r.problems == 0 {
+        println!("Everything looks good.");
+    } else {
+        println!(
+            "{} problem{} found.",
+            r.problems,
+            if r.problems == 1 { "" } else { "s" }
+        );
+    }
+}
+
+/// The installed version, and whether a newer one is out.
+fn check_oms(r: &mut Report) {
     let current = env!("CARGO_PKG_VERSION");
     match update::latest_tag() {
         Ok(tag) if update::is_newer(tag.trim_start_matches('v'), current) => r.line(
@@ -66,8 +88,10 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
             format!("{current} (couldn't check for updates)"),
         ),
     }
+}
 
-    // Ghostty.
+/// Ghostty installed (and which binary), and whether we're running in it.
+fn check_ghostty(r: &mut Report) -> Option<&'static str> {
     let ghostty_bin = [
         "ghostty",
         "/Applications/Ghostty.app/Contents/MacOS/ghostty",
@@ -93,9 +117,11 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
             "not running in Ghostty, so there's no live preview here",
         );
     }
+    ghostty_bin
+}
 
-    // Config.
-    let config = ghostty::config_path();
+/// The config file is valid and its theme is installed.
+fn check_config(r: &mut Report, ghostty_bin: Option<&str>, config: &Path) {
     let shown = config.display().to_string();
     if config.exists() {
         let valid = ghostty_bin.and_then(|b| {
@@ -124,7 +150,7 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
             format!("{shown} doesn't exist yet; oms creates it when you apply a theme"),
         );
     }
-    match ghostty::current_theme(&config) {
+    match ghostty::current_theme(config) {
         Some(theme) => {
             let themes_dir = config
                 .parent()
@@ -151,9 +177,11 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
         }
         None => r.line(Level::Warn, "Theme", "none set; pick one with `oms`"),
     }
+}
 
-    // Font from the config, if it names one.
-    if let Some(font) = fs::read_to_string(&config).ok().and_then(|t| {
+/// The font the config names is installed.
+fn check_font(r: &mut Report, ghostty_bin: Option<&str>, config: &Path) {
+    if let Some(font) = fs::read_to_string(config).ok().and_then(|t| {
         t.lines()
             .filter(|l| !l.trim_start().starts_with('#'))
             .filter_map(|l| l.split_once('='))
@@ -172,8 +200,10 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
             );
         }
     }
+}
 
-    // Downloads.
+/// The themes and wallpapers have been downloaded.
+fn check_downloads(r: &mut Report, repos: Option<&Repos>) {
     match repos {
         Some(repos) => {
             let count = |dir: &Path| {
@@ -199,8 +229,10 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
         }
         None => r.line(Level::Fail, "Downloads", "missing; run `oms update`"),
     }
+}
 
-    // Wallpapers on every Space.
+/// Wallpapers can be set on every Space (macOS 14+).
+fn check_wallpapers(r: &mut Report) {
     let store = dirs::data_dir()
         .unwrap_or_default()
         .join("com.apple.wallpaper/Store/Index.plist");
@@ -213,8 +245,10 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
             "only the current Space (needs macOS 14 or newer for all Spaces)",
         );
     }
+}
 
-    // Background agent.
+/// The background agent is running exactly when it's needed.
+fn check_agent(r: &mut Report, settings: &Settings) {
     let wanted = settings.needs_daemon();
     let loaded = run(
         "launchctl",
@@ -242,8 +276,10 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
         ),
         (false, true, _) => r.line(Level::Warn, "Agent", "installed but not needed"),
     }
+}
 
-    // Themed apps.
+/// Apps that are switched on look installed.
+fn check_apps(r: &mut Report, settings: &Settings) {
     for app in &settings.apps {
         if apps::available(app) {
             r.line(Level::Ok, &format!("App: {app}"), "follows the theme");
@@ -255,16 +291,4 @@ pub fn run_checks(repos: Option<&Repos>) -> Result<()> {
             );
         }
     }
-
-    println!();
-    if r.problems == 0 {
-        println!("Everything looks good.");
-    } else {
-        println!(
-            "{} problem{} found.",
-            r.problems,
-            if r.problems == 1 { "" } else { "s" }
-        );
-    }
-    Ok(())
 }
