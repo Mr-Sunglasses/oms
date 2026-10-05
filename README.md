@@ -1,5 +1,9 @@
 # oms
 
+[![CI](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Mr-Sunglasses/oms)](https://github.com/Mr-Sunglasses/oms/releases/latest)
+[![Website](https://img.shields.io/netlify/cc8f57d1-7c7d-4891-82a9-8b098d325363?label=website)](https://oms.kanishkk.xyz)
+
 Omarchy's themes, for your whole Mac. Pick one of the 22 [Omarchy](https://github.com/omacom/omarchy) themes and `oms` applies it everywhere at once: the [Ghostty](https://ghostty.org) theme, the wallpaper on every Space, and the colors of Neovim, btop, bat and tmux. It can also follow light and dark mode on its own.
 
 **Website:** [oms.kanishkk.xyz](https://oms.kanishkk.xyz)
@@ -173,7 +177,7 @@ Builds are signed and notarized automatically once these repository secrets exis
 | `APPLE_TEAM_ID` | Your 10-character team ID |
 | `APPLE_APP_PASSWORD` | An [app-specific password](https://account.apple.com) for notarization |
 
-The website lives in [`site/`](site) and is hosted on Netlify ([`netlify.toml`](netlify.toml) publishes the folder as-is). Deploy it with `netlify deploy --prod`, or link the repo in Netlify so every push deploys. Add news to the "Notes" list in `site/index.html`. After themes change, rebuild its theme data and wallpaper thumbnails with `./site/build.py`.
+The website lives in [`site/`](site) and is hosted on Netlify ([`netlify.toml`](netlify.toml) publishes the folder as-is). Every push to `main` deploys it (the repo is connected to Netlify). Add news to the "Notes" list in `site/index.html`. After themes change, rebuild its theme data and wallpaper thumbnails with `./site/build.py`.
 
 ## Credits
 
