@@ -93,6 +93,7 @@
   .caption b { color: var(--fg); }
 
   section { padding: 56px 0 0; }
+  video.demo { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); box-shadow: 0 30px 60px -30px rgb(0 0 0 / .55); }
   h2 { font-size: 15px; margin: 0 0 18px; color: var(--cursor); font-weight: 700; }
   h2::before { content: "## "; color: var(--accent); }
   .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
@@ -134,6 +135,7 @@
   <header class="top">
     <a class="brand" href="#">oms<span>.</span></a>
     <nav>
+      <a href="#demo">demo</a>
       <a href="#install">install</a>
       <a href="#commands">commands</a>
       <a href="#notes">notes</a>
@@ -181,6 +183,11 @@
     </div>
   </figure>
   <div class="caption"><span><b id="cap-name">Tokyo Night</b> · <span id="cap-mode">dark</span></span><span id="cap-walls">8 wallpapers</span></div>
+
+  <section id="demo">
+    <h2>See it in action</h2>
+    <video class="demo" src="demo.mp4" poster="demo-poster.jpg" autoplay muted loop playsinline preload="metadata" aria-label="oms demo: browsing themes with live preview, then applying one"></video>
+  </section>
 
   <section>
     <h2>What it does</h2>

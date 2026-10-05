@@ -8,7 +8,9 @@ Omarchy's themes, for your whole Mac. Pick one of the 22 [Omarchy](https://githu
 
 **Website:** [oms.kanishkk.xyz](https://oms.kanishkk.xyz)
 
-![oms showing Tokyo Night](docs/screenshot.png)
+![oms demo: browsing themes with live preview, then applying one](docs/demo.gif)
+
+<sub>▶ [Watch the demo in full quality](https://oms.kanishkk.xyz/demo.mp4)</sub>
 
 - **Live preview:** Ghostty recolors as you move through the list. Quit without applying and your theme comes back.
 - **Wallpapers everywhere:** each theme's own wallpapers, set on every Space and display at once, with previews right in the terminal.
@@ -21,7 +23,12 @@ Omarchy's themes, for your whole Mac. Pick one of the 22 [Omarchy](https://githu
 
 macOS only. Themes come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and wallpapers from [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers).
 
-![oms showing Catppuccin Latte](docs/light.png)
+<table>
+<tr>
+<td><img src="docs/screenshot.png" alt="oms showing Tokyo Night"></td>
+<td><img src="docs/light.png" alt="oms showing Catppuccin Latte"></td>
+</tr>
+</table>
 
 ## Install
 
