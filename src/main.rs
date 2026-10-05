@@ -6,6 +6,7 @@ mod ghostty;
 mod images;
 mod repo;
 mod ui;
+mod update;
 mod wallpaper;
 
 use std::path::PathBuf;
@@ -27,6 +28,7 @@ Usage:
   oms list                     list themes and wallpaper counts
   oms apply <theme> [n|random] apply a theme and its nth (default 1st) wallpaper
   oms update                   download the latest themes and wallpapers
+  oms self-update              update oms itself to the latest release
 
 Options:
   --themes <dir>       use a ghostty-omarchy-themes checkout
@@ -62,6 +64,16 @@ fn main() -> Result<()> {
             }
             _ => args.push(arg),
         }
+    }
+
+    // `self-update` (or `self update`) doesn't need the theme repos.
+    if matches!(
+        args.first().map(String::as_str),
+        Some("self-update" | "selfupdate")
+    ) || (args.first().map(String::as_str) == Some("self")
+        && args.get(1).map(String::as_str) == Some("update"))
+    {
+        return update::self_update();
     }
 
     let repos = Repos::locate(themes_dir, wallpapers_dir)?;

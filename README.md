@@ -63,6 +63,7 @@ oms apply tokyo-night         # theme + its first wallpaper
 oms apply "Tokyo Night" 3     # theme + its 3rd wallpaper
 oms apply nord random         # theme + a random wallpaper
 oms update                    # download new themes and wallpapers
+oms self-update               # update oms itself to the latest release
 ```
 
 To use your own checkouts of the two repos, pass `--themes <dir>` and `--wallpapers <dir>`.
