@@ -64,9 +64,47 @@ oms apply "Tokyo Night" 3     # theme + its 3rd wallpaper
 oms apply nord random         # theme + a random wallpaper
 oms update                    # download new themes and wallpapers
 oms self-update               # update oms itself to the latest release
+oms config install            # use Kanishk's Ghostty config (see below)
 ```
 
 To use your own checkouts of the two repos, pass `--themes <dir>` and `--wallpapers <dir>`.
+
+## Kanishk's Ghostty config
+
+`oms` ships with an opinionated Ghostty config, the one I use every day. Install it with:
+
+```sh
+oms config install
+```
+
+It includes:
+- the FiraCode Nerd Font with its nicer alternate glyphs, and extra line spacing;
+- slight transparency and blur;
+- a bar cursor with a smooth trail ([cursor shader](https://github.com/sahaj-b/ghostty-cursor-shaders), MIT);
+- left Option working as Alt;
+- 100 MB of scrollback;
+- shell integration, including SSH fixes;
+- keybindings for splits and tabs, plus a drop-down terminal on <kbd>Cmd</kbd>+<kbd>`</kbd>.
+
+Every setting is commented, so you can read it with `oms config show`.
+
+Installing it:
+- backs up your current config next to it (`config.oms-<date>.bak`);
+- keeps the theme you already use;
+- adds the shader to `~/.config/ghostty/shaders`;
+- reloads Ghostty.
+
+Some window settings (transparency, blur, the shader) only take effect after you quit and reopen Ghostty. If the font is missing, `oms` tells you how to install it:
+
+```sh
+brew install --cask font-fira-code-nerd-font
+```
+
+To go back to your previous config:
+
+```sh
+oms config restore
+```
 
 ## How it works
 

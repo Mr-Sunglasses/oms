@@ -4,6 +4,7 @@
 mod app;
 mod ghostty;
 mod images;
+mod preset;
 mod repo;
 mod ui;
 mod update;
@@ -29,6 +30,9 @@ Usage:
   oms apply <theme> [n|random] apply a theme and its nth (default 1st) wallpaper
   oms update                   download the latest themes and wallpapers
   oms self-update              update oms itself to the latest release
+  oms config install           use Kanishk's Ghostty config (backs up yours)
+  oms config show              print that config
+  oms config restore           put your previous Ghostty config back
 
 Options:
   --themes <dir>       use a ghostty-omarchy-themes checkout
@@ -74,6 +78,14 @@ fn main() -> Result<()> {
         && args.get(1).map(String::as_str) == Some("update"))
     {
         return update::self_update();
+    }
+    if args.first().map(String::as_str) == Some("config") {
+        if args.get(1).map(String::as_str) == Some("install") {
+            // The config names an Omarchy theme, so make sure they're installed.
+            let repos = Repos::locate(themes_dir, wallpapers_dir)?;
+            ghostty::install_themes(&repos.themes)?;
+        }
+        return preset::run(&args[1..]);
     }
 
     let repos = Repos::locate(themes_dir, wallpapers_dir)?;

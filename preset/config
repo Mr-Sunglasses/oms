@@ -1,0 +1,287 @@
+# ==============================================================================
+#  Ghostty config
+# ==============================================================================
+#
+#  Docs:        https://ghostty.org/docs/config
+#  All options: ghostty +show-config --default --docs
+#  Validate:    ghostty +validate-config
+#  Reload:      cmd+shift+,
+#               Window-level settings (opacity, blur, titlebar style,
+#               colorspace, icon, shader) need a full restart: cmd+q, reopen.
+#
+#  Syntax: `key = value`. Comments must be on their own line; a trailing
+#  `# ...` after a value becomes part of the value.
+#
+#  Backups of earlier versions sit next to this file (config.*.bak).
+
+
+# ------------------------------------------------------------------------------
+#  Theme
+# ------------------------------------------------------------------------------
+#  Omarchy themes live in ~/.config/ghostty/themes
+#  (from github.com/Mr-Sunglasses/ghostty-omarchy-themes).
+#
+#  Preview only your own themes:
+#    GHOSTTY_RESOURCES_DIR=/var/empty ghostty +list-themes
+#  Preview everything, including Ghostty's built-ins:
+#    ghostty +list-themes
+#
+#  Follow macOS light/dark mode instead of a fixed theme:
+#    theme = light:Omarchy Catppuccin Latte,dark:Omarchy Catppuccin Mocha
+
+theme = Omarchy Osaka Jade
+
+
+# ------------------------------------------------------------------------------
+#  Font
+# ------------------------------------------------------------------------------
+#  Must match the family name exactly, or Ghostty silently falls back to its
+#  built-in JetBrains Mono. List installed names with: ghostty +list-fonts
+#  Check what is really used with:                    ghostty +show-face --cp=65
+
+font-family = "FiraCode Nerd Font Mono"
+font-size = 22
+
+# Extra line spacing so code breathes. The window grows to keep 30 rows.
+adjust-cell-height = 10%
+
+# FiraCode alternate glyphs (one feature per line; remove any you dislike):
+#   ss02  <= and >= drawn with a flat bar instead of a slanted one
+#   ss08  == != === !== with gaps between the strokes
+#   zero  slashed zero, easy to tell apart from O
+font-feature = ss02
+font-feature = ss08
+font-feature = zero
+
+# Gamma-correct text blending: smoother, more even glyph edges, and light
+# text on dark themes no longer looks thin.
+alpha-blending = linear-corrected
+
+
+# ------------------------------------------------------------------------------
+#  Text colors & readability
+# ------------------------------------------------------------------------------
+
+# Bold text uses the theme's bright palette, so headings, errors and git
+# output stand out.
+bold-color = bright
+
+# Omarchy themes set ANSI color 0 ("black") to the background color, so
+# programs printing black text would be invisible. 1.1 nudges only text that
+# is (nearly) identical to its background; normal text is untouched.
+# Raise to 3+ to force everything to be clearly readable.
+minimum-contrast = 1.1
+
+# Opacity of dim/faint text (hints, ghost suggestions). Default 0.5 is hard
+# to read on dark jade; 0.65 stays subtle but legible.
+faint-opacity = 0.65
+
+
+# ------------------------------------------------------------------------------
+#  Window
+# ------------------------------------------------------------------------------
+
+# Initial size in cells (columns x rows). 128 columns at size 22 just fits
+# the 16" MacBook display.
+window-width = 128
+window-height = 30
+
+window-decoration = true
+
+# Classic look (Ghostty's default): the title bar blends into the theme, and
+# a full-width tab strip appears below it once 2+ tabs are open.
+# Other styles:
+#   tabs    tabs as pills inside the title bar, always visible (even 1 tab)
+#   native  standard grey macOS title bar
+#   hidden  no title bar at all
+macos-titlebar-style = transparent
+
+# Use the MacBook's wide-gamut P3 display for richer theme colors.
+window-colorspace = display-p3
+
+# Dock icon: set by the theme. Each Omarchy theme recolors the icon to match
+# (ghost = cursor color, screen = background -> selection gradient), so it
+# changes whenever you change `theme` (after a full restart).
+#
+# To pin your own icon instead, uncomment and edit; this file always wins
+# over the theme. `custom-style` is experimental in Ghostty.
+#   Presets:  official, glass, holographic, retro, xray, blueprint,
+#             chalkboard, microchip, paper
+#   Frames:   aluminum, beige, plastic, chrome
+#   Screen:   one color, or a comma-separated list for a gradient
+# macos-icon = custom-style
+# macos-icon-frame = plastic
+# macos-icon-ghost-color = #F7E8B2
+# macos-icon-screen-color = #111c18,#32473B
+
+# Hide the "128 x 30" size box that pops up while resizing the window.
+resize-overlay = never
+
+# Padding in points. Balance spreads leftover space evenly so the text grid
+# sits centred instead of hugging the top-left corner.
+window-padding-x = 10
+window-padding-y = 8
+window-padding-balance = true
+
+# Padding takes the color of the nearest edge cell, so full-screen apps
+# (Neovim, htop, lazygit) fill the window edge to edge.
+window-padding-color = extend
+
+# Reopen windows, tabs and splits from the last session on launch.
+window-save-state = always
+
+# No fixed `title`: tabs show the current directory / running command, so
+# they can be told apart.
+
+
+# ------------------------------------------------------------------------------
+#  Transparency
+# ------------------------------------------------------------------------------
+#  0.92 keeps code fully readable; blur turns whatever is behind the window
+#  into a soft tint. Use 0.95 for more solid, 1 to turn it off.
+#  Changing these needs a full restart (cmd+q), not just a reload.
+
+background-opacity = 0.92
+background-blur = 20
+
+
+# ------------------------------------------------------------------------------
+#  Cursor & mouse
+# ------------------------------------------------------------------------------
+
+# Thin editor-style cursor. Use `block` for the classic terminal look.
+cursor-style = bar
+cursor-style-blink = true
+
+# Bar cursor width in pixels (default 1): easier to spot, fuller trail.
+adjust-cursor-thickness = 2
+
+mouse-hide-while-typing = true
+
+
+# ------------------------------------------------------------------------------
+#  Input
+# ------------------------------------------------------------------------------
+#  Left Option acts as Alt/Meta: option+left/right and option+b/f jump words in
+#  the shell, option+backspace deletes a word, and Alt bindings work in
+#  Neovim, tmux, fzf, etc. Right Option still types special characters (é, ©).
+
+macos-option-as-alt = left
+
+
+# ------------------------------------------------------------------------------
+#  Splits
+# ------------------------------------------------------------------------------
+
+# Dim inactive splits a little (default 0.7 looks washed out).
+unfocused-split-opacity = 0.85
+
+# Divider color: set by the theme (its accent color), so it follows theme
+# changes. Uncomment to pin a color of your own.
+# split-divider-color = #509475
+
+
+# ------------------------------------------------------------------------------
+#  Cursor trail shader
+# ------------------------------------------------------------------------------
+#  Smooth, Neovide-style trail that follows the cursor when it jumps.
+#  Source: github.com/sahaj-b/ghostty-cursor-shaders (MIT, license copied to
+#  shaders/LICENSE.cursor-shaders). Paths are relative to this config folder.
+#
+#  Tweak it in shaders/cursor_warp.glsl: DURATION (trail length in seconds),
+#  TRAIL_SIZE (amount of smear), FADE_ENABLED (fading tail), easing function.
+#  If a shader fails to compile, Ghostty just runs without it.
+#  To turn it off, comment out the line below and restart Ghostty.
+
+custom-shader = shaders/cursor_warp.glsl
+
+
+# ------------------------------------------------------------------------------
+#  Shell integration
+# ------------------------------------------------------------------------------
+#  cursor        bar cursor at the prompt, block while a program runs
+#  sudo          keep Ghostty's terminfo when running sudo
+#  title         tab title follows the directory / running command
+#  ssh-env       set TERM=xterm-256color when ssh-ing, so remote hosts that
+#                don't know Ghostty still work
+#  ssh-terminfo  install Ghostty's terminfo on remote hosts on first connect
+#                (fixes "unknown terminal type 'xterm-ghostty'")
+
+shell-integration-features = cursor,sudo,title,ssh-env,ssh-terminfo
+
+
+# ------------------------------------------------------------------------------
+#  Scrollback
+# ------------------------------------------------------------------------------
+#  In bytes, per terminal. 100 MB keeps long build and test logs intact
+#  (default is 10 MB). Memory is only used as the scrollback fills up.
+
+scrollback-limit = 100000000
+
+
+# ------------------------------------------------------------------------------
+#  Keybindings
+# ------------------------------------------------------------------------------
+#  `cmd` = the Command key. `global:` bindings work even when Ghostty is not
+#  focused (needs Accessibility permission in System Settings).
+#  See every active binding with: ghostty +list-keybinds
+#
+#  Built-in defaults worth knowing (no config needed):
+#    cmd+t / cmd+n          new tab / new window
+#    cmd+w                  close the current split or tab
+#    cmd+shift+t            reopen the last closed tab or split (undo)
+#    cmd+shift+z            redo
+#    cmd+shift+p            command palette
+#    cmd+f                  search scrollback
+#    cmd+1..9               jump to tab N
+
+# --- Windows & tabs -----------------------------------------------------------
+
+keybind = cmd+shift+w=close_window
+keybind = cmd+shift+n=new_window
+keybind = cmd+shift+q=quit
+keybind = cmd+shift+m=toggle_fullscreen
+
+keybind = cmd+shift+;=previous_tab
+keybind = cmd+shift+'=next_tab
+
+# Removed: these replaced useful defaults and duplicated cmd+w / cmd+t.
+# keybind = cmd+shift+z=close_surface   (took over redo)
+# keybind = cmd+shift+t=new_tab         (took over reopen-closed-tab)
+
+# --- Splits -------------------------------------------------------------------
+
+keybind = cmd+shift+r=new_split:right
+keybind = cmd+shift+d=new_split:down
+
+keybind = cmd+shift+left=goto_split:left
+keybind = cmd+shift+right=goto_split:right
+keybind = cmd+shift+up=goto_split:top
+keybind = cmd+shift+down=goto_split:bottom
+
+# --- Scrolling (press cmd+shift+a, release, then an arrow) --------------------
+
+keybind = cmd+shift+a>up=scroll_to_top
+keybind = cmd+shift+a>down=scroll_to_bottom
+keybind = cmd+shift+a>left=scroll_page_up
+keybind = cmd+shift+a>right=scroll_page_down
+
+# --- Screen & font ------------------------------------------------------------
+
+keybind = cmd+shift+[=clear_screen
+keybind = cmd+shift+]=reset_font_size
+
+# --- Global (work from any app) -----------------------------------------------
+
+# Drop-down quick terminal.
+keybind = global:cmd+grave_accent=toggle_quick_terminal
+
+# Removed: as a global binding it stole Paste and Match Style (cmd+shift+v)
+# from every other app. The quick terminal above covers show/hide.
+# keybind = global:cmd+shift+v=toggle_visibility
+
+# --- Misc ---------------------------------------------------------------------
+
+# Shift+Enter inserts a newline instead of submitting (multi-line input in
+# Claude Code and other TUIs).
+keybind = shift+enter=text:\n
