@@ -1,34 +1,16 @@
+<div align="center">
+
 # oms
 
-[![CI](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Mr-Sunglasses/oms)](https://github.com/Mr-Sunglasses/oms/releases/latest)
-[![Website](https://img.shields.io/netlify/cc8f57d1-7c7d-4891-82a9-8b098d325363?label=website)](https://oms.kanishkk.xyz)
+Omarchy themes for your whole Mac: Ghostty, your wallpaper and your apps, switched with one key.
 
-Omarchy's themes, for your whole Mac. Pick one of the 22 [Omarchy](https://github.com/omacom/omarchy) themes and `oms` applies it everywhere at once: the [Ghostty](https://ghostty.org) theme, the wallpaper on every Space, and the colors of Neovim, btop, bat and tmux. It can also follow light and dark mode on its own.
+[![CI](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Mr-Sunglasses/oms)](https://github.com/Mr-Sunglasses/oms/releases/latest) [![Website](https://img.shields.io/badge/website-oms.kanishkk.xyz-7aa2f7)](https://oms.kanishkk.xyz)
 
-**Website:** [oms.kanishkk.xyz](https://oms.kanishkk.xyz)
+<img src="docs/demo.gif" alt="oms demo: browsing themes with live preview, then applying one" width="860">
 
-![oms demo: browsing themes with live preview, then applying one](docs/demo.gif)
+<sub>▶ [Watch in full quality](https://oms.kanishkk.xyz/demo.mp4)</sub>
 
-<sub>▶ [Watch the demo in full quality](https://oms.kanishkk.xyz/demo.mp4)</sub>
-
-- **Live preview:** Ghostty recolors as you move through the list. Quit without applying and your theme comes back.
-- **Wallpapers everywhere:** each theme's own wallpapers, set on every Space and display at once, with previews right in the terminal.
-- **Light and dark:** pick a day theme and a night theme, and your Mac switches them when the appearance changes.
-- **Your apps too:** Neovim, btop, bat, tmux and the macOS accent color can follow the theme.
-- **Rotation:** move to the theme's next wallpaper on a timer.
-- **Favorites, history and search:** star themes, see recent ones first, filter by name.
-- **Your own wallpapers:** add pictures or folders to any theme.
-- **Kanishk's Ghostty config:** install all of it, or just the parts you like.
-
-macOS only. Themes come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and wallpapers from [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers).
-
-<table>
-<tr>
-<td><img src="docs/screenshot.png" alt="oms showing Tokyo Night"></td>
-<td><img src="docs/light.png" alt="oms showing Catppuccin Latte"></td>
-</tr>
-</table>
+</div>
 
 ## Install
 
@@ -36,156 +18,86 @@ macOS only. Themes come from [ghostty-omarchy-themes](https://github.com/Mr-Sung
 curl -fsSL https://kanishkk.xyz/oms | bash
 ```
 
-Or straight from GitHub:
+Then run `oms`. Works on Apple silicon and Intel Macs. Update later with `oms self-update`.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/Mr-Sunglasses/oms/main/install.sh | bash
-```
+## What it does
 
-This puts the `oms` command in `~/.local/bin`. It's a universal binary, so it runs on Apple silicon and Intel Macs. Git must be installed (`xcode-select --install`).
+- **22 Omarchy themes** for [Ghostty](https://ghostty.org), with a live preview as you browse.
+- **Matching wallpapers**, set on every desktop and screen at once.
+- **Light and dark mode:** pick a day theme and a night theme, and your Mac switches between them.
+- **Your apps too:** Neovim, btop, bat, tmux and the macOS accent color can follow the theme.
+- **Wallpaper rotation**, favorites, search, and your own wallpapers.
 
-With [Rust](https://rustup.rs) you can also build it yourself:
+## Using it
 
-```sh
-cargo install --git https://github.com/Mr-Sunglasses/oms
-```
+Run `oms` and pick a theme. The main keys:
 
-Keep it current with `oms self-update`. The picker also tells you when a new version is out.
-
-## The picker
-
-```sh
-oms
-```
-
-The first run downloads the themes and wallpapers (about 100 MB) into `~/Library/Application Support/omarchy-switch` and installs the theme files into `~/.config/ghostty/themes`. After that, `oms` checks for new themes, wallpapers and releases in the background every few hours.
-
-| Key | Action |
+| Key | Does |
 |---|---|
-| <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>j</kbd> <kbd>k</kbd> | Choose a theme |
-| <kbd>←</kbd> <kbd>→</kbd> or <kbd>h</kbd> <kbd>l</kbd> | Choose one of its wallpapers |
-| <kbd>Enter</kbd> | Apply the theme and the wallpaper |
-| <kbd>t</kbd> / <kbd>w</kbd> | Apply only the theme / only the wallpaper |
-| <kbd>r</kbd> | Pick a random theme and wallpaper |
-| <kbd>f</kbd> | Favorite: ★ themes sit at the top, · marks recent ones |
-| <kbd>/</kbd> | Filter by name (<kbd>Esc</kbd> clears) |
-| <kbd>L</kbd> / <kbd>D</kbd> | Use this theme and wallpaper in light / dark mode |
-| <kbd>p</kbd> | Turn live preview on or off |
-| <kbd>?</kbd> | Show all keys |
-| <kbd>q</kbd> | Quit |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Choose a theme |
+| <kbd>←</kbd> <kbd>→</kbd> | Choose a wallpaper |
+| <kbd>Enter</kbd> | Apply both |
+| <kbd>f</kbd> | Favorite |
+| <kbd>/</kbd> | Search |
+| <kbd>L</kbd> / <kbd>D</kbd> | Use for light / dark mode |
+| <kbd>?</kbd> | All keys |
 
-● marks what's applied now; ☀ and ☾ mark the light and dark themes.
-
-## Light and dark mode
-
-Pick a theme for each, in the picker with <kbd>L</kbd> and <kbd>D</kbd>, or from the command line:
+Everything also works from the command line:
 
 ```sh
-oms auto catppuccin-latte tokyo-night     # light, dark
-oms auto catppuccin-latte:2 tokyo-night:3 # with their 2nd and 3rd wallpapers
-oms auto off
+oms apply tokyo-night                 # apply a theme and its wallpaper
+oms auto catppuccin-latte tokyo-night # light and dark themes
+oms rotate 30m                        # new wallpaper every 30 minutes
+oms apps on nvim btop bat tmux        # theme other apps too
+oms wallpapers add nord ~/Pictures    # add your own wallpapers
+oms status                            # see what's on
+oms --help                            # everything else
 ```
 
-Ghostty switches its theme itself (`theme = light:…,dark:…`). A small background agent switches the wallpaper and app themes when macOS changes appearance. It's a LaunchAgent (`~/Library/LaunchAgents/xyz.kanishkk.oms.plist`) that only runs while light/dark switching or rotation is on, and it logs to `~/Library/Application Support/omarchy-switch/agent.log`. Applying a single theme turns light/dark switching off.
+## My Ghostty config
 
-## Wallpapers
+oms also ships the Ghostty config I use: FiraCode font, a little transparency, a smooth cursor trail and handy keybindings.
 
 ```sh
-oms rotate 30m                       # the theme's next wallpaper every 30 minutes (or 2h, 1d)
-oms rotate off
-oms wallpapers add nord ~/Pictures/nordic     # your own pictures or folders
-oms wallpapers list nord
-oms wallpapers remove nord ~/Pictures/nordic
+oms config install               # use all of it (your current config is backed up)
+oms config install --only font   # or just part of it (see: oms config sections)
+oms config restore               # go back to yours
 ```
 
-Your pictures appear after the theme's own ones, in the picker too. Wallpapers are set on every Space and every display, and become the default for new Spaces.
-
-## Other apps
+## Uninstall
 
 ```sh
-oms apps                        # what can follow the theme
-oms apps on nvim btop bat tmux accent
-oms apps off tmux               # stop, and remove what oms added
+oms uninstall
 ```
 
-| App | What `oms` does |
-|---|---|
-| `nvim` | Writes `~/.config/nvim/lua/plugins/omarchy-theme.lua`, the Omarchy theme's colorscheme for [LazyVim](https://www.lazyvim.org). Restart Neovim to see it. |
-| `btop` | Writes the `omarchy` color theme and selects it in `btop.conf`. |
-| `bat` | Writes the `omarchy` theme, rebuilds bat's cache and sets `--theme` in bat's config. delta uses it too. |
-| `tmux` | Writes `~/.config/tmux/omarchy-theme.conf`, sources it from your tmux.conf, and reloads running sessions. |
-| `accent` | Sets the macOS accent color to the one closest to the theme's accent. |
+## Contributing
 
-The app themes come from [ghostty-omarchy-themes/apps](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes/tree/main/apps): Omarchy's own Neovim and btop themes, plus bat and tmux themes made from the same colors.
-
-## Kanishk's Ghostty config
-
-`oms` ships with an opinionated Ghostty config, the one I use every day:
-- the FiraCode Nerd Font with its nicer alternate glyphs, and extra line spacing;
-- slight transparency and blur;
-- a bar cursor with a smooth trail ([cursor shader](https://github.com/sahaj-b/ghostty-cursor-shaders), MIT);
-- left Option working as Alt;
-- 100 MB of scrollback;
-- shell integration, including SSH fixes;
-- keybindings for splits and tabs, plus a drop-down terminal on <kbd>Cmd</kbd>+<kbd>`</kbd>.
+You need [Rust](https://rustup.rs) and a Mac.
 
 ```sh
-oms config install                         # all of it (keeps your theme)
-oms config sections                        # list the parts
-oms config install --only font,keybindings # just some parts, merged into your config
-oms config show [section]                  # read it; every setting is commented
-oms config restore                         # put your previous config back
+git clone https://github.com/Mr-Sunglasses/oms
+cd oms
+cargo run                 # run the picker
+cargo test                # run the tests
 ```
 
-Installing backs up your config first (`config.oms-<date>.bak`). With `--only`, each part goes into your config between `# >>> oms preset: <part>` markers, your own lines for the same settings are commented out, and running it again replaces the part instead of adding it twice.
+CI checks formatting (`cargo fmt`), lints (`cargo clippy`) and tests on every pull request.
 
-Some window settings (transparency, blur, the shader) need a full restart of Ghostty. If the font is missing, `oms` tells you how to install it: `brew install --cask font-fira-code-nerd-font`.
+- **Code:** `src/`. The picker is in `app.rs` and `ui.rs`; theme, wallpaper and app changes are in `ghostty.rs`, `wallpaper.rs` and `apps.rs`.
+- **Themes and wallpapers** come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers); change them there.
+- **Website:** `site/`. It deploys to [oms.kanishkk.xyz](https://oms.kanishkk.xyz) on every push to `main`.
+- **Releases:** bump `version` in `Cargo.toml` and push a tag like `v0.6.0`. GitHub Actions builds and publishes it.
 
-## All commands
+<details>
+<summary>Signing releases</summary>
 
-```text
-oms                               open the picker
-oms list | status                 list themes / show what's applied and switched on
-oms apply <theme> [n|random]      apply a theme and one of its wallpapers
-oms auto <light> <dark> | off     follow macOS light/dark mode
-oms rotate <30m|2h|off>           rotate wallpapers
-oms wallpapers add|remove|list    your own wallpapers
-oms apps [on|off <app>...]        theme other apps
-oms config ...                    Kanishk's Ghostty config
-oms update                        download the latest themes and wallpapers
-oms self-update                   update oms itself
-oms uninstall [--all]             remove oms (--all: the Omarchy theme files too)
-```
+Releases are unsigned until these repository secrets exist. Once they do, builds are signed and notarized automatically:
+`APPLE_CERTIFICATE` (Developer ID .p12, base64), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`.
 
-## How it works
+</details>
 
-- **Theme:** sets the `theme =` line in your Ghostty config and leaves the rest of the file alone. It edits the file that sets the theme now, or `~/.config/ghostty/config` if none does. It then sends Ghostty `SIGUSR2`, which makes Ghostty reload its config and recolor every window.
-- **Wallpaper:** macOS's public API only changes the current Space, so `oms` updates the wallpaper settings file (`~/Library/Application Support/com.apple.wallpaper/Store/Index.plist`) for every Space and display, then restarts `WallpaperAgent` so it reloads them. This needs no extra permissions. On macOS before 14, which doesn't have that file, it changes the current Space only.
-- **Preview:** wallpapers are drawn with the Kitty graphics protocol, which Ghostty supports. Other terminals fall back to colored blocks.
-
-Notes:
-
-- The Omarchy themes also recolor Ghostty's app icon. Icon changes need a full restart of Ghostty (quit and reopen).
-- `OMS_DATA_DIR` moves where oms keeps its downloads and settings.
-- Tested with Ghostty 1.3 on macOS 27.
-
-## Releasing
-
-Push a tag like `v0.6.0` (after bumping `version` in `Cargo.toml`) and GitHub Actions builds the universal binary and publishes the release. `oms self-update` and the install script pick it up.
-
-Builds are signed and notarized automatically once these repository secrets exist (Settings → Secrets and variables → Actions). Until then they're unsigned, which is fine for the curl install:
-
-| Secret | Value |
-|---|---|
-| `APPLE_CERTIFICATE` | Your "Developer ID Application" certificate as a `.p12`, base64-encoded (`base64 -i cert.p12 \| pbcopy`) |
-| `APPLE_CERTIFICATE_PASSWORD` | The `.p12` password |
-| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Kanishk Pachauri (TEAMID)` |
-| `APPLE_ID` | Your Apple ID email |
-| `APPLE_TEAM_ID` | Your 10-character team ID |
-| `APPLE_APP_PASSWORD` | An [app-specific password](https://account.apple.com) for notarization |
-
-The website lives in [`site/`](site) and is hosted on Netlify ([`netlify.toml`](netlify.toml) publishes the folder as-is). Every push to `main` deploys it (the repo is connected to Netlify). Add news to the "Notes" list in `site/index.html`. After themes change, rebuild its theme data and wallpaper thumbnails with `./site/build.py`.
+Issues and pull requests are welcome.
 
 ## Credits
 
-Themes and wallpapers come from [Omarchy](https://github.com/omacom/omarchy) by David Heinemeier Hansson and its contributors, and from the original theme authors and artists. Released under the [MIT License](LICENSE).
+Themes and wallpapers come from [Omarchy](https://github.com/omacom/omarchy) and their original authors and artists. [MIT License](LICENSE).
