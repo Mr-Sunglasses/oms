@@ -1,4 +1,4 @@
-# omarchy-switch (`oms`)
+# oms
 
 Pick an [Omarchy](https://github.com/omacom/omarchy) theme for [Ghostty](https://ghostty.org) and a matching macOS wallpaper from one terminal UI, and apply both with one key.
 
@@ -22,7 +22,7 @@ curl -fsSL https://kanishkk.xyz/oms | bash
 Or straight from GitHub:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Mr-Sunglasses/omarchy-switch/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Mr-Sunglasses/oms/main/install.sh | bash
 ```
 
 This puts the `oms` command in `~/.local/bin`. It's a universal binary, so it runs on Apple silicon and Intel Macs. Git must be installed (`xcode-select --install`).
@@ -30,7 +30,7 @@ This puts the `oms` command in `~/.local/bin`. It's a universal binary, so it ru
 With [Rust](https://rustup.rs) you can also build it yourself:
 
 ```sh
-cargo install --git https://github.com/Mr-Sunglasses/omarchy-switch
+cargo install --git https://github.com/Mr-Sunglasses/oms
 ```
 
 ## Use

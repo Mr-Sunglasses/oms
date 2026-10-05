@@ -1,14 +1,14 @@
 #!/bin/bash
-# Install oms (omarchy-switch) on macOS.
+# Install oms on macOS.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Mr-Sunglasses/omarchy-switch/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Mr-Sunglasses/oms/main/install.sh | bash
 #
 # Downloads the latest release (a universal binary for Apple silicon and Intel)
 # into ~/.local/bin. Set OMS_INSTALL_DIR to install somewhere else, or
 # OMS_VERSION (e.g. v0.1.0) to pick a release.
 set -euo pipefail
 
-REPO="Mr-Sunglasses/omarchy-switch"
+REPO="Mr-Sunglasses/oms"
 DIR="${OMS_INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${OMS_VERSION:-latest}"
 

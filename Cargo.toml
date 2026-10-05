@@ -1,14 +1,10 @@
 [package]
-name = "omarchy-switch"
+name = "oms"
 version = "0.1.0"
 edition = "2024"
 description = "Pick an Omarchy theme for Ghostty and a matching macOS wallpaper from one TUI"
 license = "MIT"
-repository = "https://github.com/Mr-Sunglasses/omarchy-switch"
-
-[[bin]]
-name = "oms"
-path = "src/main.rs"
+repository = "https://github.com/Mr-Sunglasses/oms"
 
 [dependencies]
 anyhow = "1.0.104"

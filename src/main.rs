@@ -1,4 +1,4 @@
-//! omarchy-switch: pick an Omarchy theme for Ghostty and a matching macOS
+//! oms: pick an Omarchy theme for Ghostty and a matching macOS
 //! wallpaper from one TUI.
 
 mod app;
@@ -20,7 +20,7 @@ use crate::app::App;
 use crate::repo::{Repos, Theme};
 
 const USAGE: &str = "\
-oms (omarchy-switch): Omarchy themes for Ghostty and matching macOS wallpapers
+oms: Omarchy themes for Ghostty and matching macOS wallpapers
 
 Usage:
   oms                          open the picker
