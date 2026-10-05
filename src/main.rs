@@ -20,18 +20,19 @@ use crate::app::App;
 use crate::repo::{Repos, Theme};
 
 const USAGE: &str = "\
-omarchy-switch: Omarchy themes for Ghostty and matching macOS wallpapers
+oms (omarchy-switch): Omarchy themes for Ghostty and matching macOS wallpapers
 
 Usage:
-  omarchy-switch                          open the picker
-  omarchy-switch list                     list themes and wallpaper counts
-  omarchy-switch apply <theme> [n|random] apply a theme and its nth (default 1st) wallpaper
-  omarchy-switch update                   download the latest themes and wallpapers
+  oms                          open the picker
+  oms list                     list themes and wallpaper counts
+  oms apply <theme> [n|random] apply a theme and its nth (default 1st) wallpaper
+  oms update                   download the latest themes and wallpapers
 
 Options:
   --themes <dir>       use a ghostty-omarchy-themes checkout
   --wallpapers <dir>   use an omarchy-wallpapers checkout
   -h, --help           show this help
+  -V, --version        show the version
 
 Themes can be given as a name or slug: \"Tokyo Night\", tokyo-night.";
 
@@ -43,6 +44,10 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "-h" | "--help" => {
                 println!("{USAGE}");
+                return Ok(());
+            }
+            "-V" | "--version" => {
+                println!("oms {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
             }
             "--themes" => {
@@ -112,7 +117,7 @@ fn run(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
 }
 
 fn apply(themes: Vec<Theme>, name: Option<&String>, which: Option<&String>) -> Result<()> {
-    let name = name.context("which theme? Run `omarchy-switch list` to see them")?;
+    let name = name.context("which theme? Run `oms list` to see them")?;
     let theme = themes
         .iter()
         .find(|t| t.matches(name))

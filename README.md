@@ -1,8 +1,8 @@
-# omarchy-switch
+# omarchy-switch (`oms`)
 
 Pick an [Omarchy](https://github.com/omacom/omarchy) theme for [Ghostty](https://ghostty.org) and a matching macOS wallpaper from one terminal UI, and apply both with one key.
 
-![omarchy-switch showing Tokyo Night](docs/screenshot.png)
+![oms showing Tokyo Night](docs/screenshot.png)
 
 - **All 22 Omarchy themes**, each with a preview of its colors and its own wallpapers.
 - **Live preview:** while you move through the list, Ghostty recolors to the selected theme. Quit without applying and your theme comes back.
@@ -11,28 +11,32 @@ Pick an [Omarchy](https://github.com/omacom/omarchy) theme for [Ghostty](https:/
 
 macOS only. Themes come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and wallpapers from [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers).
 
-![omarchy-switch showing Catppuccin Latte](docs/light.png)
+![oms showing Catppuccin Latte](docs/light.png)
 
 ## Install
 
-You need [Rust](https://rustup.rs) and Git (`xcode-select --install`).
+```sh
+curl -fsSL https://kanishkk.xyz/oms | bash
+```
+
+Or straight from GitHub:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Mr-Sunglasses/omarchy-switch/main/install.sh | bash
+```
+
+This puts the `oms` command in `~/.local/bin`. It's a universal binary, so it runs on Apple silicon and Intel Macs. Git must be installed (`xcode-select --install`).
+
+With [Rust](https://rustup.rs) you can also build it yourself:
 
 ```sh
 cargo install --git https://github.com/Mr-Sunglasses/omarchy-switch
 ```
 
-Or from a clone:
-
-```sh
-git clone https://github.com/Mr-Sunglasses/omarchy-switch
-cd omarchy-switch
-cargo install --path .
-```
-
 ## Use
 
 ```sh
-omarchy-switch
+oms
 ```
 
 The first run downloads the themes and wallpapers (about 100 MB) into `~/Library/Application Support/omarchy-switch` and installs the theme files into `~/.config/ghostty/themes`.
@@ -54,11 +58,11 @@ A green dot marks the theme and wallpaper that are applied now.
 ### From scripts
 
 ```sh
-omarchy-switch list                      # themes and how many wallpapers each has
-omarchy-switch apply tokyo-night         # theme + its first wallpaper
-omarchy-switch apply "Tokyo Night" 3     # theme + its 3rd wallpaper
-omarchy-switch apply nord random         # theme + a random wallpaper
-omarchy-switch update                    # download new themes and wallpapers
+oms list                      # themes and how many wallpapers each has
+oms apply tokyo-night         # theme + its first wallpaper
+oms apply "Tokyo Night" 3     # theme + its 3rd wallpaper
+oms apply nord random         # theme + a random wallpaper
+oms update                    # download new themes and wallpapers
 ```
 
 To use your own checkouts of the two repos, pass `--themes <dir>` and `--wallpapers <dir>`.

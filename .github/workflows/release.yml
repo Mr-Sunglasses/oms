@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Install Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Build
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+
+      - name: Make a universal binary
+        run: |
+          mkdir dist
+          lipo -create -output dist/oms \
+            target/aarch64-apple-darwin/release/oms \
+            target/x86_64-apple-darwin/release/oms
+          dist/oms --version
+          tar -czf oms-macos-universal.tar.gz -C dist oms
+          shasum -a 256 oms-macos-universal.tar.gz > oms-macos-universal.tar.gz.sha256
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" oms-macos-universal.tar.gz oms-macos-universal.tar.gz.sha256 --clobber
+          else
+            gh release create "$TAG" oms-macos-universal.tar.gz oms-macos-universal.tar.gz.sha256 \
+              --title "oms $TAG" --generate-notes
+          fi
