@@ -4,7 +4,9 @@
 mod actions;
 mod app;
 mod apps;
+mod completions;
 mod daemon;
+mod doctor;
 mod ghostty;
 mod images;
 mod preset;
@@ -15,12 +17,17 @@ mod uninstall;
 mod update;
 mod wallpaper;
 
+use std::io::{BufRead, IsTerminal, Write};
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use ratatui::DefaultTerminal;
-use ratatui::crossterm::event::{self, Event, KeyEventKind};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind,
+};
+use ratatui::crossterm::execute;
 use ratatui_image::picker::Picker;
 
 use crate::app::App;
@@ -59,8 +66,10 @@ Ghostty config:
   oms config restore                put your previous Ghostty config back
 
 Maintenance:
+  oms doctor                        check your setup and say what to fix
   oms update                        download the latest themes and wallpapers
   oms self-update                   update oms itself to the latest release
+  oms completions <zsh|bash|fish>   tab completion for your shell
   oms uninstall [--all]             remove oms (--all: Omarchy theme files too)
 
 Options:
@@ -102,10 +111,15 @@ fn main() -> Result<()> {
 
     // Commands that don't need the theme repos.
     match arg(0) {
-        Some("self-update" | "selfupdate") => return update::self_update(),
-        Some("self") if arg(1) == Some("update") => return update::self_update(),
+        Some("self-update" | "selfupdate") => return update::self_update().map(|_| ()),
+        Some("self") if arg(1) == Some("update") => return update::self_update().map(|_| ()),
         Some("uninstall") => return uninstall::run(&args[1..]),
         Some("daemon") => return daemon::run(),
+        Some("completions") => return completions::print(arg(1)),
+        Some("doctor") => {
+            let repos = Repos::existing(themes_dir.clone(), wallpapers_dir.clone());
+            return doctor::run_checks(repos.as_ref());
+        }
         Some("config") if arg(1) != Some("install") => return preset::run(&args[1..]),
         _ => {}
     }
@@ -114,8 +128,14 @@ fn main() -> Result<()> {
     ghostty::install_themes(&repos.themes)?;
     let mut settings = Settings::load();
 
-    match arg(0) {
+    let result = match arg(0) {
         None => tui(&repos, settings),
+        Some("list") if arg(1) == Some("--names") => {
+            for t in repos.load(&settings)? {
+                println!("{}", t.slug);
+            }
+            return Ok(());
+        }
         Some("config") => preset::run(&args[1..]),
         Some("update") => {
             let changed = repos.update()?;
@@ -164,29 +184,88 @@ fn main() -> Result<()> {
         Some("apps") => apps_command(&repos, &mut settings, &args[1..]),
         Some("wallpapers") => wallpapers(&repos, &mut settings, &args[1..]),
         Some(other) => bail!("unknown command {other:?}\n\n{USAGE}"),
+    };
+    // After other commands, mention a new release (the picker shows its own).
+    if arg(0).is_some()
+        && let Some(version) = Settings::load().update_to_offer()
+    {
+        eprintln!("\noms {version} is out. Update with: oms self-update");
+    }
+    result
+}
+
+/// Starts this program again with the same arguments (after an update).
+fn restart() -> Result<()> {
+    let exe = std::env::current_exe()?;
+    let err = std::process::Command::new(exe)
+        .args(std::env::args().skip(1))
+        .exec();
+    Err(err.into())
+}
+
+/// Asks to update when a newer release is known. Returns true if it updated.
+fn offer_update(settings: &mut Settings) -> Result<bool> {
+    let Some(version) = settings.update_to_offer() else {
+        return Ok(false);
+    };
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return Ok(false);
+    }
+    print!(
+        "\x1b[1moms {version} is out\x1b[0m (you have {}). Update now? [Y/n] ",
+        env!("CARGO_PKG_VERSION")
+    );
+    std::io::stdout().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().lock().read_line(&mut answer)?;
+    if matches!(answer.trim().to_lowercase().as_str(), "" | "y" | "yes") {
+        if update::self_update()? {
+            return Ok(true);
+        }
+        // The remembered release wasn't newer after all; forget it.
+        settings.latest_version = None;
+        settings.save()?;
+        Ok(false)
+    } else {
+        settings.skipped_version = Some(version.clone());
+        settings.save()?;
+        println!(
+            "OK. You won't be asked about {version} again; update any time with `oms self-update`."
+        );
+        Ok(false)
     }
 }
 
-fn tui(repos: &Repos, settings: Settings) -> Result<()> {
+fn tui(repos: &Repos, mut settings: Settings) -> Result<()> {
+    if offer_update(&mut settings)? {
+        return restart();
+    }
     let themes = repos.load(&settings)?;
     let mut terminal = ratatui::init();
+    let _ = execute!(std::io::stdout(), EnableMouseCapture);
     let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
     let mut app = App::new(themes, settings, picker, repos);
     let result = run(&mut terminal, &mut app);
     let restored = app.restore();
+    let _ = execute!(std::io::stdout(), DisableMouseCapture);
     ratatui::restore();
-    result.and(restored)
+    result.and(restored)?;
+    if app.update_requested && update::self_update()? {
+        return restart();
+    }
+    Ok(())
 }
 
 fn run(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
     while !app.quit {
         app.tick();
         terminal.draw(|f| ui::draw(f, app))?;
-        if event::poll(Duration::from_millis(40))?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            app.handle_key(key);
+        if event::poll(Duration::from_millis(40))? {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => app.handle_key(key),
+                Event::Mouse(mouse) => app.handle_mouse(mouse),
+                _ => {}
+            }
         }
     }
     Ok(())

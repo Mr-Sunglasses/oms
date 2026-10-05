@@ -5,8 +5,18 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::thread::sleep;
+use std::ptr::NonNull;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
+
+use block2::RcBlock;
+use objc2::rc::Retained;
+use objc2::runtime::{NSObjectProtocol, ProtocolObject};
+use objc2_foundation::{
+    NSDate, NSDefaultRunLoopMode, NSDistributedNotificationCenter, NSNotification, NSRunLoop,
+    NSString,
+};
 
 use anyhow::{Context, Result};
 
@@ -15,13 +25,32 @@ use crate::settings::{Choice, Settings, data_dir};
 use crate::{actions, ghostty, wallpaper};
 
 const LABEL: &str = "xyz.kanishkk.oms";
-const TICK: Duration = Duration::from_secs(5);
+
+/// The agent's launchd name. A custom `OMS_DATA_DIR` gets its own agent, so a
+/// second setup (or a test) never replaces or removes the main one.
+pub fn label() -> String {
+    match std::env::var_os("OMS_DATA_DIR") {
+        Some(dir) => {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            dir.hash(&mut hasher);
+            format!("{LABEL}.{:08x}", hasher.finish() as u32)
+        }
+        None => LABEL.to_string(),
+    }
+}
+/// Posted by oms whenever its settings change.
+const SETTINGS_CHANGED: &str = "xyz.kanishkk.oms.settings-changed";
+/// Posted by macOS when it switches between light and dark mode.
+const APPEARANCE_CHANGED: &str = "AppleInterfaceThemeChangedNotification";
+/// A check now and then even without notifications, in case one was missed.
+const SAFETY_TICK: Duration = Duration::from_secs(300);
 
 fn plist_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_default()
         .join("Library/LaunchAgents")
-        .join(format!("{LABEL}.plist"))
+        .join(format!("{}.plist", label()))
 }
 
 fn domain() -> String {
@@ -55,7 +84,7 @@ fn plist() -> Result<String> {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>{LABEL}</string>
+  <key>Label</key><string>{}</string>
   <key>ProgramArguments</key>
   <array><string>{}</string><string>daemon</string></array>
 {}  <key>RunAtLoad</key><true/>
@@ -66,6 +95,7 @@ fn plist() -> Result<String> {
 </dict>
 </plist>
 "#,
+        label(),
         esc(exe.display().to_string()),
         environment(),
         esc(log.display().to_string()),
@@ -106,7 +136,7 @@ fn install() -> Result<()> {
     let path = plist_path();
     let text = plist()?;
     let loaded = Command::new("launchctl")
-        .args(["print", &format!("{}/{LABEL}", domain())])
+        .args(["print", &format!("{}/{}", domain(), label())])
         .output()
         .is_ok_and(|o| o.status.success());
     if loaded && fs::read_to_string(&path).is_ok_and(|t| t == text) {
@@ -116,7 +146,7 @@ fn install() -> Result<()> {
     fs::create_dir_all(data_dir())?;
     fs::write(&path, text)?;
     let _ = Command::new("launchctl")
-        .args(["bootout", &format!("{}/{LABEL}", domain())])
+        .args(["bootout", &format!("{}/{}", domain(), label())])
         .output();
     let out = Command::new("launchctl")
         .args(["bootstrap", &domain()])
@@ -131,11 +161,20 @@ fn install() -> Result<()> {
     Ok(())
 }
 
+/// Restarts the agent (e.g. after an update) so it runs the new binary.
+pub fn restart_if_running() {
+    if is_installed() {
+        let _ = Command::new("launchctl")
+            .args(["kickstart", "-k", &format!("{}/{}", domain(), label())])
+            .output();
+    }
+}
+
 pub fn uninstall() -> Result<()> {
     let path = plist_path();
     if path.exists() {
         let _ = Command::new("launchctl")
-            .args(["bootout", &format!("{}/{LABEL}", domain())])
+            .args(["bootout", &format!("{}/{}", domain(), label())])
             .output();
         fs::remove_file(&path)?;
     }
@@ -158,42 +197,102 @@ fn log(message: &str) {
     eprintln!("{} {message}", String::from_utf8_lossy(&out).trim());
 }
 
-/// The agent's loop. Runs until launchd stops it.
+/// Tells the agent (if it's running) to reread the settings.
+pub fn post_settings_changed() {
+    let center = NSDistributedNotificationCenter::defaultCenter();
+    unsafe {
+        center.postNotificationName_object_userInfo_deliverImmediately(
+            &NSString::from_str(SETTINGS_CHANGED),
+            None,
+            None,
+            true,
+        );
+    }
+}
+
+/// Sets `flag` whenever macOS changes appearance or oms changes its settings.
+fn observe(flag: &Arc<AtomicBool>) -> Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>> {
+    let center = NSDistributedNotificationCenter::defaultCenter();
+    [APPEARANCE_CHANGED, SETTINGS_CHANGED]
+        .iter()
+        .map(|name| {
+            let flag = flag.clone();
+            let block = RcBlock::new(move |_: NonNull<NSNotification>| {
+                flag.store(true, Ordering::SeqCst);
+            });
+            unsafe {
+                center.addObserverForName_object_queue_usingBlock(
+                    Some(&NSString::from_str(name)),
+                    None,
+                    None,
+                    &block,
+                )
+            }
+        })
+        .collect()
+}
+
+/// Sleeps on the run loop until a notification arrives or `timeout` passes.
+fn wait(timeout: Duration, flag: &AtomicBool) {
+    let started = Instant::now();
+    let until = NSDate::dateWithTimeIntervalSinceNow(timeout.as_secs_f64());
+    let run_loop = NSRunLoop::currentRunLoop();
+    unsafe { run_loop.runMode_beforeDate(NSDefaultRunLoopMode, &until) };
+    // Guard against a run loop with nothing to wait on returning at once.
+    if !flag.load(Ordering::SeqCst) && started.elapsed() < Duration::from_millis(10) {
+        std::thread::sleep(timeout.min(Duration::from_secs(1)));
+    }
+}
+
+/// The agent's loop. Runs until launchd stops it. It sleeps until macOS
+/// changes appearance, oms changes its settings, or a wallpaper is due.
 pub fn run() -> Result<()> {
     let repos = Repos::locate(None, None)?;
+    let woken = Arc::new(AtomicBool::new(true));
+    let _observers = observe(&woken);
     // What the agent last switched to, so a new light/dark pick applies at once.
     let mut last: Option<Choice> = None;
     let mut last_rotation = Instant::now();
+    let mut last_check = Instant::now();
+    let mut settings = Settings::default();
+    let mut dark = false;
     log("started");
     loop {
-        let settings = Settings::load();
-        let themes = repos.load(&settings).unwrap_or_default();
-        let dark = is_dark();
-
-        if settings.auto
-            && let (Some(light), Some(dark_choice)) = (&settings.light, &settings.dark)
-        {
-            let choice = if dark { dark_choice } else { light };
-            if last.as_ref() != Some(choice) {
-                if let Err(e) = follow_appearance(&themes, choice, &settings) {
-                    log(&format!("couldn't switch to {}: {e:#}", choice.theme));
+        if woken.swap(false, Ordering::SeqCst) || last_check.elapsed() >= SAFETY_TICK {
+            last_check = Instant::now();
+            settings = Settings::load();
+            dark = is_dark();
+            if settings.auto
+                && let (Some(light), Some(dark_choice)) = (&settings.light, &settings.dark)
+            {
+                let choice = if dark { dark_choice } else { light };
+                if last.as_ref() != Some(choice) {
+                    let themes = repos.load(&settings).unwrap_or_default();
+                    if let Err(e) = follow_appearance(&themes, choice, &settings) {
+                        log(&format!("couldn't switch to {}: {e:#}", choice.theme));
+                    }
+                    last = Some(choice.clone());
+                    last_rotation = Instant::now();
                 }
-                last = Some(choice.clone());
-                last_rotation = Instant::now();
+            } else {
+                last = None;
             }
-        } else {
-            last = None;
         }
 
-        if let Some(minutes) = settings.rotate_minutes
-            && last_rotation.elapsed() >= Duration::from_secs(minutes.max(1) * 60)
-        {
-            if let Err(e) = rotate(&themes, &settings, dark) {
-                log(&format!("couldn't rotate: {e:#}"));
+        let mut timeout = SAFETY_TICK;
+        if let Some(minutes) = settings.rotate_minutes {
+            let every = Duration::from_secs(minutes.max(1) * 60);
+            if last_rotation.elapsed() >= every {
+                let themes = repos.load(&settings).unwrap_or_default();
+                if let Err(e) = rotate(&themes, &settings, dark) {
+                    log(&format!("couldn't rotate: {e:#}"));
+                }
+                last_rotation = Instant::now();
+                settings = Settings::load();
             }
-            last_rotation = Instant::now();
+            timeout = timeout.min(every.saturating_sub(last_rotation.elapsed()));
         }
-        sleep(TICK);
+        wait(timeout.max(Duration::from_millis(100)), &woken);
     }
 }
 

@@ -13,6 +13,7 @@ pub const WALLPAPERS_URL: &str = "https://github.com/Mr-Sunglasses/omarchy-wallp
 
 pub type Rgb = (u8, u8, u8);
 
+#[derive(Clone)]
 pub struct Theme {
     /// Display name, e.g. "Tokyo Night".
     pub name: String,
@@ -65,31 +66,39 @@ pub struct Repos {
 }
 
 impl Repos {
-    /// Uses the given checkouts, or clones into the app's data directory.
-    pub fn locate(themes: Option<PathBuf>, wallpapers: Option<PathBuf>) -> Result<Self> {
+    fn paths(themes: Option<PathBuf>, wallpapers: Option<PathBuf>) -> Self {
         let data = data_dir();
-        let repos = Repos {
+        Repos {
             themes: themes.unwrap_or_else(|| data.join("ghostty-omarchy-themes")),
             wallpapers: wallpapers.unwrap_or_else(|| data.join("omarchy-wallpapers")),
-        };
-        for (dir, url) in [
-            (&repos.themes, THEMES_URL),
-            (&repos.wallpapers, WALLPAPERS_URL),
+        }
+    }
+
+    /// The checkouts if they're already downloaded; never downloads.
+    pub fn existing(themes: Option<PathBuf>, wallpapers: Option<PathBuf>) -> Option<Self> {
+        let repos = Self::paths(themes, wallpapers);
+        (repos.themes.exists() && repos.wallpapers.exists()).then_some(repos)
+    }
+
+    /// Uses the given checkouts, or downloads them into the app's data directory.
+    pub fn locate(themes: Option<PathBuf>, wallpapers: Option<PathBuf>) -> Result<Self> {
+        let repos = Self::paths(themes, wallpapers);
+        let missing = !repos.themes.exists() || !repos.wallpapers.exists();
+        if missing {
+            eprintln!(
+                "\x1b[1mWelcome to oms!\x1b[0m Downloading the themes and wallpapers (once, about 100 MB)…\n"
+            );
+        }
+        for (dir, url, label) in [
+            (&repos.themes, THEMES_URL, "Themes"),
+            (&repos.wallpapers, WALLPAPERS_URL, "Wallpapers"),
         ] {
             if !dir.exists() {
-                eprintln!("Downloading {url} ...");
-                git(
-                    None,
-                    &[
-                        "clone",
-                        "--quiet",
-                        "--depth",
-                        "1",
-                        url,
-                        &dir.to_string_lossy(),
-                    ],
-                )?;
+                clone_with_progress(url, dir, label)?;
             }
+        }
+        if missing {
+            eprintln!();
         }
         Ok(repos)
     }
@@ -130,6 +139,77 @@ impl Repos {
         themes.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(themes)
     }
+}
+
+/// `git clone` with a progress bar on the terminal.
+fn clone_with_progress(url: &str, dir: &Path, label: &str) -> Result<()> {
+    use std::io::{IsTerminal, Read, Write};
+    let tty = std::io::stderr().is_terminal();
+    let partial = dir.with_extension("partial");
+    let _ = fs::remove_dir_all(&partial);
+    let mut child = Command::new("git")
+        .args(["clone", "--depth", "1", "--progress", url])
+        .arg(&partial)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("running git (install it with `xcode-select --install`)")?;
+    let mut stderr = child.stderr.take().context("no git output")?;
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 512];
+    let mut last = String::new();
+    let draw = |percent: usize, detail: &str| {
+        let filled = percent * 24 / 100;
+        eprint!(
+            "\r  {label:<11} [{}{}] {percent:>3}%  {detail:<20}",
+            "█".repeat(filled),
+            "░".repeat(24 - filled)
+        );
+        let _ = std::io::stderr().flush();
+    };
+    while let Ok(n) = stderr.read(&mut chunk) {
+        if n == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..n]);
+        // git redraws its progress with '\r'; parse the newest line.
+        while let Some(end) = buffer.iter().position(|&b| b == b'\r' || b == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=end).collect();
+            let line = String::from_utf8_lossy(&line).trim().to_string();
+            if let Some(rest) = line.strip_prefix("Receiving objects:") {
+                let percent = rest
+                    .trim()
+                    .split('%')
+                    .next()
+                    .and_then(|p| p.trim().parse().ok())
+                    .unwrap_or(0);
+                let size = rest
+                    .split(", ")
+                    .nth(1)
+                    .map(|s| s.split(" |").next().unwrap_or("").trim().to_string())
+                    .unwrap_or_default();
+                if tty {
+                    draw(percent, &size);
+                }
+            }
+            if !line.is_empty() {
+                last = line;
+            }
+        }
+    }
+    let status = child.wait()?;
+    if !status.success() {
+        let _ = fs::remove_dir_all(&partial);
+        bail!("downloading {url} failed: {last}");
+    }
+    fs::rename(&partial, dir)?;
+    if tty {
+        draw(100, "done");
+        eprintln!();
+    } else {
+        eprintln!("{label}: downloaded");
+    }
+    Ok(())
 }
 
 /// Image files in `paths`, which can be files or folders.

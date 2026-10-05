@@ -1,42 +1,80 @@
-//! Decodes and downsizes wallpapers on a background thread for the preview.
+//! Wallpaper previews: decoded on a background thread, kept small in a disk
+//! cache so they load in milliseconds, and pre-made for every wallpaper while
+//! the picker is idle.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::thread;
+use std::time::Duration;
 
+use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ImageReader};
 
-/// Previews are downsized to fit this, which is plenty for a terminal pane.
-const MAX_SIZE: (u32, u32) = (1600, 1000);
-const CACHE_SIZE: usize = 24;
+use crate::settings::data_dir;
 
-type Loaded = (PathBuf, Result<DynamicImage, String>);
+/// Previews are downsized to fit this, which is plenty for a terminal pane.
+const PREVIEW_SIZE: (u32, u32) = (1600, 1000);
+/// Thumbnails for the strip under the preview.
+const THUMB_SIZE: (u32, u32) = (320, 200);
+const CACHE_SIZE: usize = 12;
+
+pub struct Preview {
+    pub image: DynamicImage,
+    pub thumb: DynamicImage,
+}
+
+type Loaded = (PathBuf, Result<Preview, String>);
 
 pub struct Loader {
     requests: Sender<PathBuf>,
     results: Receiver<Loaded>,
-    cache: HashMap<PathBuf, DynamicImage>,
+    cache: HashMap<PathBuf, Preview>,
     order: VecDeque<PathBuf>,
     pending: HashSet<PathBuf>,
     pub errors: HashMap<PathBuf, String>,
 }
 
 impl Loader {
-    pub fn new() -> Self {
+    /// `prefetch`: wallpapers to put in the disk cache while nothing else is asked for.
+    pub fn new(prefetch: Vec<PathBuf>) -> Self {
         let (requests, inbox) = channel::<PathBuf>();
         let (outbox, results) = channel::<Loaded>();
         thread::spawn(move || {
-            while let Ok(first) = inbox.recv() {
-                // Newest request first, so the picture being looked at wins.
-                let mut queue = vec![first];
+            let mut prefetch: VecDeque<PathBuf> = prefetch
+                .into_iter()
+                .filter(|p| !cache_path(p).exists())
+                .collect();
+            let mut queue: Vec<PathBuf> = Vec::new();
+            loop {
+                if queue.is_empty() {
+                    let wait = if prefetch.is_empty() {
+                        Duration::from_secs(3600)
+                    } else {
+                        Duration::from_millis(30)
+                    };
+                    match inbox.recv_timeout(wait) {
+                        Ok(path) => queue.push(path),
+                        Err(RecvTimeoutError::Timeout) => {
+                            // Idle: make one more cached preview.
+                            if let Some(path) = prefetch.pop_front() {
+                                let _ = load(&path);
+                            }
+                            continue;
+                        }
+                        Err(RecvTimeoutError::Disconnected) => return,
+                    }
+                }
                 queue.extend(inbox.try_iter());
-                while let Some(path) = queue.pop() {
-                    let result = decode(&path);
+                // Newest request first, so the picture being looked at wins.
+                if let Some(path) = queue.pop() {
+                    let result = load(&path);
                     if outbox.send((path, result)).is_err() {
                         return;
                     }
-                    queue.extend(inbox.try_iter());
                 }
             }
         });
@@ -66,9 +104,9 @@ impl Loader {
             any = true;
             self.pending.remove(&path);
             match result {
-                Ok(image) => {
+                Ok(preview) => {
                     self.order.push_back(path.clone());
-                    self.cache.insert(path, image);
+                    self.cache.insert(path, preview);
                     while self.order.len() > CACHE_SIZE {
                         if let Some(old) = self.order.pop_front() {
                             self.cache.remove(&old);
@@ -83,21 +121,76 @@ impl Loader {
         any
     }
 
-    pub fn get(&self, path: &PathBuf) -> Option<&DynamicImage> {
+    pub fn get(&self, path: &PathBuf) -> Option<&Preview> {
         self.cache.get(path)
     }
 }
 
-fn decode(path: &PathBuf) -> Result<DynamicImage, String> {
-    let image = ImageReader::open(path)
+/// `<data dir>/previews/<hash>.jpg`, keyed by the file's path, size and
+/// modification time, so an edited wallpaper gets a new preview.
+fn cache_path(path: &Path) -> PathBuf {
+    let mut hasher = DefaultHasher::new();
+    path.hash(&mut hasher);
+    if let Ok(meta) = fs::metadata(path) {
+        meta.len().hash(&mut hasher);
+        if let Ok(modified) = meta.modified() {
+            modified.hash(&mut hasher);
+        }
+    }
+    data_dir()
+        .join("previews")
+        .join(format!("{:016x}.jpg", hasher.finish()))
+}
+
+fn decode(path: &Path) -> Result<DynamicImage, String> {
+    ImageReader::open(path)
         .and_then(|r| r.with_guessed_format())
         .map_err(|e| e.to_string())?
         .decode()
-        .map_err(|e| e.to_string())?;
-    let image = if image.width() > MAX_SIZE.0 || image.height() > MAX_SIZE.1 {
-        image.thumbnail(MAX_SIZE.0, MAX_SIZE.1)
-    } else {
-        image
+        .map_err(|e| e.to_string())
+}
+
+/// The small cached copy if there is one; otherwise decodes the original,
+/// shrinks it and caches that.
+fn load(path: &Path) -> Result<Preview, String> {
+    let cached = cache_path(path);
+    let image = match decode(&cached) {
+        Ok(image) => image,
+        Err(_) => {
+            let full = decode(path)?;
+            let small = if full.width() > PREVIEW_SIZE.0 || full.height() > PREVIEW_SIZE.1 {
+                full.thumbnail(PREVIEW_SIZE.0, PREVIEW_SIZE.1)
+            } else {
+                full
+            };
+            let small = DynamicImage::ImageRgb8(small.to_rgb8());
+            save(&small, &cached);
+            small
+        }
     };
-    Ok(DynamicImage::ImageRgb8(image.to_rgb8()))
+    let thumb = image.thumbnail(THUMB_SIZE.0, THUMB_SIZE.1);
+    Ok(Preview {
+        image: DynamicImage::ImageRgb8(image.to_rgb8()),
+        thumb,
+    })
+}
+
+fn save(image: &DynamicImage, path: &Path) {
+    let Some(dir) = path.parent() else { return };
+    if fs::create_dir_all(dir).is_err() {
+        return;
+    }
+    // Write next to it and rename, so a half-written file is never read.
+    let tmp = path.with_extension("tmp");
+    let written = fs::File::create(&tmp).is_ok_and(|file| {
+        let mut writer = std::io::BufWriter::new(file);
+        image
+            .write_with_encoder(JpegEncoder::new_with_quality(&mut writer, 88))
+            .is_ok()
+    });
+    if written {
+        let _ = fs::rename(&tmp, path);
+    } else {
+        let _ = fs::remove_file(&tmp);
+    }
 }

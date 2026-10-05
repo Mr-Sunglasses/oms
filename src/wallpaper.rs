@@ -21,14 +21,24 @@ pub fn set(path: &Path) -> Result<()> {
     let path = path
         .canonicalize()
         .with_context(|| format!("{} not found", path.display()))?;
-    match set_in_store(&path) {
+    match set_everywhere(&path) {
         Ok(()) => Ok(()),
         Err(_) => set_current_space(&path),
     }
 }
 
-/// The public API: only changes the current Space on each display.
-fn set_current_space(path: &Path) -> Result<()> {
+/// Every Space and display, through WallpaperAgent's store. Safe to call off
+/// the main thread; when it fails, use `set_current_space` on the main thread.
+pub fn set_everywhere(path: &Path) -> Result<()> {
+    let path = path
+        .canonicalize()
+        .with_context(|| format!("{} not found", path.display()))?;
+    set_in_store(&path)
+}
+
+/// The public API: only changes the current Space on each display. Must run
+/// on the main thread.
+pub fn set_current_space(path: &Path) -> Result<()> {
     let mtm = MainThreadMarker::new().context("wallpaper must be set from the main thread")?;
     let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
     let workspace = NSWorkspace::sharedWorkspace();

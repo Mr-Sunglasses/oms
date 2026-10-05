@@ -16,13 +16,14 @@ pub fn available() -> Option<String> {
     is_newer(latest, env!("CARGO_PKG_VERSION")).then(|| latest.to_string())
 }
 
-pub fn self_update() -> Result<()> {
+/// Returns whether a newer version was installed.
+pub fn self_update() -> Result<bool> {
     let current = env!("CARGO_PKG_VERSION");
     let tag = latest_tag()?;
     let latest = tag.trim_start_matches('v');
     if !is_newer(latest, current) {
         println!("oms {current} is already the latest version.");
-        return Ok(());
+        return Ok(false);
     }
 
     let exe = std::env::current_exe()?.canonicalize()?;
@@ -55,7 +56,9 @@ pub fn self_update() -> Result<()> {
     let _ = fs::remove_dir_all(&tmp);
     result?;
     println!("Updated oms {current} → {latest} ({}).", exe.display());
-    Ok(())
+    // A running background agent would keep the old version until logout.
+    crate::daemon::restart_if_running();
+    Ok(true)
 }
 
 /// The newest release tag, from where /releases/latest redirects to.

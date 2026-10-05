@@ -18,7 +18,9 @@ Omarchy themes for your whole Mac: Ghostty, your wallpaper and your apps, switch
 curl -fsSL https://kanishkk.xyz/oms | bash
 ```
 
-Then run `oms`. Works on Apple silicon and Intel Macs. Update later with `oms self-update`.
+Then run `oms`. Works on Apple silicon and Intel Macs. When a new version is out, `oms` asks if you want to update.
+
+Tab completion for your shell: add `source <(oms completions zsh)` to `~/.zshrc` (or `bash`, or `oms completions fish | source` for fish).
 
 ## What it does
 
@@ -35,12 +37,16 @@ Run `oms` and pick a theme. The main keys:
 | Key | Does |
 |---|---|
 | <kbd>↑</kbd> <kbd>↓</kbd> | Choose a theme |
-| <kbd>←</kbd> <kbd>→</kbd> | Choose a wallpaper |
+| <kbd>←</kbd> <kbd>→</kbd> | Choose a wallpaper (or click a thumbnail) |
 | <kbd>Enter</kbd> | Apply both |
+| <kbd>u</kbd> | Undo |
 | <kbd>f</kbd> | Favorite |
 | <kbd>/</kbd> | Search |
+| <kbd>Tab</kbd> | Show all, dark or light themes |
 | <kbd>L</kbd> / <kbd>D</kbd> | Use for light / dark mode |
 | <kbd>?</kbd> | All keys |
+
+The mouse works too: click or scroll the list and the thumbnails.
 
 Everything also works from the command line:
 
@@ -51,6 +57,7 @@ oms rotate 30m                        # new wallpaper every 30 minutes
 oms apps on nvim btop bat tmux        # theme other apps too
 oms wallpapers add nord ~/Pictures    # add your own wallpapers
 oms status                            # see what's on
+oms doctor                            # check your setup if something's off
 oms --help                            # everything else
 ```
 

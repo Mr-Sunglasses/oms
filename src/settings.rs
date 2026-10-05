@@ -41,6 +41,12 @@ pub struct Settings {
     /// Unix time of the last background check for updates.
     #[serde(default)]
     pub last_update_check: u64,
+    /// Newest oms release seen by that check.
+    #[serde(default)]
+    pub latest_version: Option<String>,
+    /// A release the user chose not to update to; they aren't asked again.
+    #[serde(default)]
+    pub skipped_version: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
@@ -75,7 +81,23 @@ impl Settings {
         let tmp = path.with_extension("json.tmp");
         fs::write(&tmp, serde_json::to_string_pretty(self)? + "\n")?;
         fs::rename(&tmp, &path)?;
+        // Let the background agent pick up the change right away.
+        crate::daemon::post_settings_changed();
         Ok(())
+    }
+
+    /// A known release newer than this one (shown as a reminder in the picker).
+    pub fn newer_release(&self) -> Option<String> {
+        let latest = self.latest_version.as_ref()?;
+        crate::update::is_newer(latest, env!("CARGO_PKG_VERSION")).then(|| latest.clone())
+    }
+
+    /// A newer release to offer, unless the user skipped it.
+    pub fn update_to_offer(&self) -> Option<String> {
+        let latest = self.latest_version.as_ref()?;
+        (crate::update::is_newer(latest, env!("CARGO_PKG_VERSION"))
+            && self.skipped_version.as_ref() != Some(latest))
+        .then(|| latest.clone())
     }
 
     pub fn is_favorite(&self, slug: &str) -> bool {

@@ -9,7 +9,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, Padding, Paragraph};
 use ratatui_image::{Resize, StatefulImage};
 
-use crate::app::{App, Group, file_name};
+use crate::app::{App, Group, ModeFilter, file_name};
 use crate::repo::{Rgb, Theme};
 
 fn rgb((r, g, b): Rgb) -> Color {
@@ -24,17 +24,34 @@ fn panel(title: impl Into<Line<'static>>) -> Block<'static> {
         .title_style(Style::new().fg(Color::Blue).bold())
 }
 
+/// Below this width the picker stacks into one column.
+const NARROW: u16 = 72;
+/// Below this width (or a short window) the theme sample shrinks to its palette.
+const MEDIUM: u16 = 112;
+
 pub fn draw(f: &mut Frame, app: &mut App) {
     let [body, footer] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).areas(f.area());
-    let [left, right] =
-        Layout::horizontal([Constraint::Length(36), Constraint::Min(0)]).areas(body);
-    let [preview, wallpaper] =
-        Layout::vertical([Constraint::Length(12), Constraint::Min(0)]).areas(right);
+    app.thumb_rects.clear();
 
-    draw_themes(f, app, left);
-    draw_preview(f, app.theme(), preview);
-    draw_wallpaper(f, app, wallpaper);
+    if body.width < NARROW {
+        let list_height = (app.order.len() as u16 + 2).clamp(5, body.height * 45 / 100);
+        let [list, wallpaper] =
+            Layout::vertical([Constraint::Length(list_height), Constraint::Min(0)]).areas(body);
+        draw_themes(f, app, list);
+        draw_wallpaper(f, app, wallpaper, true);
+    } else {
+        let compact = body.width < MEDIUM || body.height < 30;
+        let list_width = if body.width < MEDIUM { 32 } else { 36 };
+        let [left, right] =
+            Layout::horizontal([Constraint::Length(list_width), Constraint::Min(0)]).areas(body);
+        let preview_height = if compact { 4 } else { 12 };
+        let [preview, wallpaper] =
+            Layout::vertical([Constraint::Length(preview_height), Constraint::Min(0)]).areas(right);
+        draw_themes(f, app, left);
+        draw_preview(f, app.theme(), preview, compact);
+        draw_wallpaper(f, app, wallpaper, false);
+    }
     draw_footer(f, app, footer);
     if app.show_help {
         draw_help(f);
@@ -58,9 +75,10 @@ fn draw_themes(f: &mut Frame, app: &mut App, area: Rect) {
                 Group::Recent => Span::raw("·").dark_gray(),
                 Group::Other => Span::raw(" "),
             };
-            // Highlighted by hand so the swatches keep their colors.
+            // Highlighted by hand so the swatches keep their colors. Reversed
+            // terminal colors stay readable whatever the theme.
             let name_style = if i == app.selected {
-                Style::new().bg(Color::Blue).fg(Color::Black).bold()
+                Style::new().reversed().bold()
             } else {
                 Style::new()
             };
@@ -89,10 +107,17 @@ fn draw_themes(f: &mut Frame, app: &mut App, area: Rect) {
             app.order.len(),
             app.themes.len()
         )
+    } else if app.mode_filter != ModeFilter::All {
+        format!(
+            " Themes · {} · {} ",
+            app.mode_filter.label(),
+            app.order.len()
+        )
     } else {
         format!(" Themes · {} ", app.themes.len())
     };
     let mut block = panel(title).padding(Padding::horizontal(1));
+    app.list_inner = block.inner(area);
     if app.order.is_empty() {
         block = block.title_bottom(Line::from(" no match · esc clears ").centered().dark_gray());
     }
@@ -100,19 +125,44 @@ fn draw_themes(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_stateful_widget(list, area, &mut app.list);
 }
 
-fn draw_preview(f: &mut Frame, t: &Theme, area: Rect) {
+fn draw_preview(f: &mut Frame, t: &Theme, area: Rect, compact: bool) {
     let bg = rgb(t.background);
     let fg = rgb(t.foreground);
     let c = |i: usize| Style::new().fg(rgb(t.palette[i])).bg(bg);
     let mode = if t.is_light() { "light" } else { "dark" };
 
+    // Swatches shrink to fit narrow panes.
+    let swatch_width = ((area.width.saturating_sub(4)) / 8).clamp(1, 5) as usize;
     let swatch_row = |offset: usize| {
         Line::from(
             (0..8)
-                .map(|i| Span::styled("     ", Style::new().bg(rgb(t.palette[offset + i]))))
+                .map(|i| {
+                    Span::styled(
+                        " ".repeat(swatch_width),
+                        Style::new().bg(rgb(t.palette[offset + i])),
+                    )
+                })
                 .collect::<Vec<_>>(),
         )
     };
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(rgb(t.palette[8])).bg(bg))
+        .title(Line::from(format!(" {} ", t.name)).style(Style::new().fg(rgb(t.palette[4])).bold()))
+        .title(
+            Line::from(format!(" {mode} "))
+                .right_aligned()
+                .style(Style::new().fg(rgb(t.palette[8]))),
+        )
+        .padding(Padding::horizontal(1))
+        .style(Style::new().bg(bg).fg(fg));
+    if compact {
+        f.render_widget(
+            Paragraph::new(vec![swatch_row(0), swatch_row(8)]).block(block),
+            area,
+        );
+        return;
+    }
     let lines = vec![
         Line::from(vec![
             Span::styled("~/code/omarchy", c(4).bold()),
@@ -152,30 +202,29 @@ fn draw_preview(f: &mut Frame, t: &Theme, area: Rect) {
         swatch_row(0),
         swatch_row(8),
     ];
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(rgb(t.palette[8])).bg(bg))
-        .title(Line::from(format!(" {} ", t.name)).style(Style::new().fg(rgb(t.palette[4])).bold()))
-        .title(
-            Line::from(format!(" {mode} "))
-                .right_aligned()
-                .style(Style::new().fg(rgb(t.palette[8]))),
-        )
-        .padding(Padding::horizontal(1))
-        .style(Style::new().bg(bg).fg(fg));
     f.render_widget(Paragraph::new(lines).block(block), area);
 }
 
-fn draw_wallpaper(f: &mut Frame, app: &mut App, area: Rect) {
-    let theme = app.theme();
+fn draw_wallpaper(f: &mut Frame, app: &mut App, area: Rect, with_theme_name: bool) {
+    app.wallpaper_area = area;
+    let theme = app.theme().clone();
     let count = theme.wallpapers.len();
     let index = app.wallpaper[app.selected];
     let path = app.wallpaper_path().cloned();
 
-    let mut title = vec![Span::raw(" Wallpaper ")];
+    let mut title = vec![Span::raw(" ")];
+    if with_theme_name {
+        title.push(Span::raw(format!("{} · ", theme.name)));
+    }
+    title.push(Span::raw("Wallpaper "));
     if let Some(path) = &path {
+        let yours = if theme.is_custom_wallpaper(index) {
+            " (yours)"
+        } else {
+            ""
+        };
         title.push(Span::raw(format!(
-            "{}/{count} · {} ",
+            "{}/{count} · {}{yours} ",
             index + 1,
             file_name(path)
         )));
@@ -192,13 +241,31 @@ fn draw_wallpaper(f: &mut Frame, app: &mut App, area: Rect) {
         f.render_widget(centered(format!("{} has no wallpapers", theme.name)), inner);
         return;
     };
-    let size = app.loader.get(&path).map(|i| (i.width(), i.height()));
+
+    // A strip of thumbnails when there's room for it.
+    let mut picture = inner;
+    if count > 1 && inner.height >= 16 && inner.width >= 40 {
+        let strip_height = 6;
+        let [main, _, strip] = Layout::vertical([
+            Constraint::Min(0),
+            Constraint::Length(1),
+            Constraint::Length(strip_height),
+        ])
+        .areas(inner);
+        picture = main;
+        draw_thumbs(f, app, &theme, strip);
+    }
+
+    let size = app
+        .loader
+        .get(&path)
+        .map(|p| (p.image.width(), p.image.height()));
     match (&mut app.image, size) {
         (Some((shown, protocol)), Some(size)) if *shown == path => {
             let resize = Resize::Scale(Some(FilterType::Triangle));
             f.render_stateful_widget(
                 StatefulImage::default().resize(resize),
-                center_image(inner, size, app.cell_aspect),
+                center_image(picture, size, app.cell_aspect),
                 protocol,
             );
         }
@@ -207,8 +274,58 @@ fn draw_wallpaper(f: &mut Frame, app: &mut App, area: Rect) {
                 Some(e) => format!("Can't preview {}: {e}", file_name(&path)),
                 None => "Loading…".to_string(),
             };
-            f.render_widget(centered(message), inner);
+            f.render_widget(centered(message), picture);
         }
+    }
+}
+
+/// Small pictures of all the theme's wallpapers; the selected one is outlined.
+fn draw_thumbs(f: &mut Frame, app: &mut App, theme: &crate::repo::Theme, area: Rect) {
+    // A 16:10 picture this many rows tall, in cells.
+    let rows = area.height.saturating_sub(2).max(1);
+    let cols = ((rows as f64 / app.cell_aspect) * 1.6).round() as u16;
+    let width = cols + 2;
+    let gap = 1;
+    let fits = ((area.width + gap) / (width + gap)).max(1) as usize;
+    let count = theme.wallpapers.len();
+    let selected = app.wallpaper[app.selected];
+    // Keep the selected thumbnail in view.
+    let start = selected
+        .saturating_sub(fits.saturating_sub(1) / 2)
+        .min(count.saturating_sub(fits));
+    let shown = fits.min(count);
+    let total_width = shown as u16 * (width + gap) - gap;
+    let mut x = area.x + area.width.saturating_sub(total_width) / 2;
+    for index in start..start + shown {
+        let path = &theme.wallpapers[index];
+        let rect = Rect {
+            x,
+            y: area.y,
+            width,
+            height: area.height,
+        };
+        let is_selected = index == selected;
+        let mut block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(if is_selected {
+                Style::new().fg(Color::Blue).bold()
+            } else {
+                Style::new().fg(Color::DarkGray)
+            });
+        if app.is_applied_wallpaper(path) {
+            block = block.title_bottom(Line::from("●").centered().green());
+        }
+        let inner = block.inner(rect);
+        f.render_widget(block, rect);
+        match app.thumbs.get_mut(path) {
+            Some(protocol) => f.render_stateful_widget(StatefulImage::default(), inner, protocol),
+            None => f.render_widget(
+                Paragraph::new("…").dark_gray().alignment(Alignment::Center),
+                inner,
+            ),
+        }
+        app.thumb_rects.push((rect, index));
+        x += width + gap;
     }
 }
 
@@ -236,58 +353,67 @@ fn centered(text: String) -> Paragraph<'static> {
 }
 
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
-    let key = |k: &'static str| Span::raw(k).blue().bold();
-    let text = |t: &'static str| Span::raw(t).dark_gray();
-    let live = if app.live {
-        Span::raw("on").green()
-    } else {
-        Span::raw("off").dark_gray()
-    };
-    let keys = Line::from(vec![
-        key(" ↑↓ "),
-        text("theme  "),
-        key("←→ "),
-        text("wallpaper  "),
-        key("enter "),
-        text("apply  "),
-        key("f "),
-        text("favorite  "),
-        key("/ "),
-        text("filter  "),
-        key("L D "),
-        text("light/dark  "),
-        key("p "),
-        text("live "),
-        live,
-        text("  "),
-        key("? "),
-        text("help  "),
-        key("q "),
-        text("quit"),
-    ]);
+    let live = if app.live { "live on" } else { "live off" };
+    let mode = format!(
+        "show {}",
+        match app.mode_filter {
+            ModeFilter::All => "dark",
+            ModeFilter::Dark => "light",
+            ModeFilter::Light => "all",
+        }
+    );
+    // In order of importance; as many as fit, always ending with help and quit.
+    let hints: Vec<(&str, String)> = vec![
+        ("↑↓", "theme".into()),
+        ("←→", "wallpaper".into()),
+        ("enter", "apply".into()),
+        ("u", "undo".into()),
+        ("f", "favorite".into()),
+        ("/", "search".into()),
+        ("tab", mode),
+        ("L D", "light/dark".into()),
+        ("p", live.into()),
+    ];
+    let tail = [("?", "help"), ("q", "quit")];
+    let width_of = |k: &str, v: &str| k.chars().count() + v.chars().count() + 3;
+    let mut budget =
+        area.width as usize - 1 - tail.iter().map(|(k, v)| width_of(k, v)).sum::<usize>();
+    let mut spans = vec![Span::raw(" ")];
+    for (k, v) in &hints {
+        let w = width_of(k, v);
+        if w > budget {
+            break;
+        }
+        budget -= w;
+        spans.push(Span::raw(format!("{k} ")).blue().bold());
+        spans.push(Span::raw(format!("{v}  ")).dark_gray());
+    }
+    for (k, v) in tail {
+        spans.push(Span::raw(format!("{k} ")).blue().bold());
+        spans.push(Span::raw(format!("{v}  ")).dark_gray());
+    }
+
+    let notice = app
+        .update_available
+        .as_ref()
+        .map(|v| format!("oms {v} is out · press U to update "));
     let [status_area, update_area] = Layout::horizontal([
         Constraint::Min(0),
-        Constraint::Length(
-            app.update_available
-                .as_ref()
-                .map_or(0, |v| v.len() as u16 + 36),
-        ),
+        Constraint::Length(notice.as_ref().map_or(0, |n| n.chars().count() as u16)),
     ])
     .areas(Rect { height: 1, ..area });
     f.render_widget(
-        Paragraph::new(Line::from(format!(" {}", app.status)).dark_gray()),
+        Paragraph::new(Line::from(format!(" {}", app.status_line())).dark_gray()),
         status_area,
     );
-    if let Some(version) = &app.update_available {
-        let notice = Line::from(vec![
-            Span::raw(format!("oms {version} is out: ")).yellow(),
-            Span::raw("oms self-update ").yellow().bold(),
-        ])
-        .right_aligned();
-        f.render_widget(Paragraph::new(notice), update_area);
+    if let Some(notice) = notice {
+        f.render_widget(
+            Paragraph::new(Line::from(notice).yellow().bold().right_aligned()),
+            update_area,
+        );
     }
     f.render_widget(
-        Paragraph::new(keys),
+        Paragraph::new(Line::from(spans)),
         Rect {
             y: area.y + 1,
             height: 1,
@@ -297,23 +423,26 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
 }
 
 const HELP: &[(&str, &str)] = &[
-    ("↑ ↓  j k", "choose a theme"),
-    ("← →  h l", "choose one of its wallpapers"),
+    ("↑ ↓  j k", "choose a theme (or scroll / click)"),
+    ("← →  h l", "choose a wallpaper (or click a thumbnail)"),
     ("enter", "apply the theme and the wallpaper"),
     ("t / w", "apply only the theme / only the wallpaper"),
+    ("u", "undo the last change"),
     ("r", "pick a random theme and wallpaper"),
     ("f", "favorite: ★ at the top, · marks recently used"),
-    ("/", "filter by name; esc clears"),
+    ("/", "search by name; esc clears"),
+    ("tab", "show all, dark or light themes"),
     (
         "L / D",
         "use this theme (and wallpaper) in light / dark mode",
     ),
     ("p", "live preview: Ghostty follows the selection"),
-    ("g / G", "first / last theme"),
+    ("U", "update oms, when a new version is out"),
     ("q  esc", "quit (a live preview is undone)"),
 ];
 
 const HELP_CLI: &[&str] = &[
+    "oms doctor            check your setup",
     "oms rotate 30m        rotate wallpapers",
     "oms apps on nvim bat  theme other apps too",
     "oms wallpapers add    use your own pictures",

@@ -16,22 +16,34 @@ pub struct Outcome {
 /// Applies a theme to Ghostty and the enabled apps, and remembers it. This is
 /// a single fixed theme, so it turns off light/dark switching.
 pub fn apply_theme(theme: &Theme, settings: &mut Settings) -> Result<Outcome> {
+    let apps = theme_effects(theme, &settings.apps)?;
+    let note = record_theme(theme, settings)?;
+    Ok(Outcome {
+        message: format!("Applied {}{apps}{note}", theme.name),
+    })
+}
+
+/// The slow part of applying a theme (files and apps); safe off the main thread.
+/// Returns text for a status line.
+pub fn theme_effects(theme: &Theme, apps: &[String]) -> Result<String> {
     ghostty::set_theme(&ghostty::config_path(), &theme.ghostty_name)?;
-    let mut message = format!("Applied {}", theme.name);
-    message.push_str(&apply_apps(theme, settings));
+    Ok(apps_text(apps::apply(theme, apps)))
+}
+
+/// Remembers an applied theme. Returns a note for the status line.
+pub fn record_theme(theme: &Theme, settings: &mut Settings) -> Result<String> {
+    let mut note = String::new();
     if settings.auto {
         settings.auto = false;
-        message.push_str(". Light/dark switching is off");
+        note.push_str(". Light/dark switching is off");
     }
     settings.record_recent(&theme.slug);
     settings.save()?;
     daemon::sync(settings)?;
-    Ok(Outcome { message })
+    Ok(note)
 }
 
-/// Applies the enabled app themes. Returns text to add to a status line.
-pub fn apply_apps(theme: &Theme, settings: &Settings) -> String {
-    let (done, failed) = apps::apply(theme, &settings.apps);
+fn apps_text((done, failed): (Vec<String>, Vec<String>)) -> String {
     let mut text = String::new();
     if !done.is_empty() {
         text.push_str(&format!(" (+ {})", done.join(", ")));
@@ -40,6 +52,11 @@ pub fn apply_apps(theme: &Theme, settings: &Settings) -> String {
         text.push_str(&format!(". Couldn't theme {}", failed.join("; ")));
     }
     text
+}
+
+/// Applies the enabled app themes. Returns text to add to a status line.
+pub fn apply_apps(theme: &Theme, settings: &Settings) -> String {
+    apps_text(apps::apply(theme, &settings.apps))
 }
 
 pub fn apply_wallpaper(theme: &Theme, index: usize, settings: &mut Settings) -> Result<PathBuf> {

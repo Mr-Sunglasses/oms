@@ -1479,9 +1479,10 @@ dependencies = [
 
 [[package]]
 name = "oms"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
+ "block2",
  "dirs",
  "image",
  "objc2",
