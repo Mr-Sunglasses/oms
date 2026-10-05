@@ -194,3 +194,30 @@ fn save(image: &DynamicImage, path: &Path) {
         let _ = fs::remove_file(&tmp);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use image::{DynamicImage, ImageFormat, RgbImage};
+
+    /// The trimmed `image` features must still read every format oms shows.
+    #[test]
+    fn decodes_the_formats_wallpapers_use() {
+        let picture = DynamicImage::ImageRgb8(RgbImage::from_fn(32, 20, |x, y| {
+            image::Rgb([x as u8 * 8, y as u8 * 12, 90])
+        }));
+        for format in [
+            ImageFormat::Jpeg,
+            ImageFormat::Png,
+            ImageFormat::WebP,
+            ImageFormat::Gif,
+        ] {
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            picture
+                .write_to(&mut bytes, format)
+                .unwrap_or_else(|e| panic!("can't write {format:?}: {e}"));
+            let back = image::load_from_memory_with_format(bytes.get_ref(), format)
+                .unwrap_or_else(|e| panic!("can't read {format:?}: {e}"));
+            assert_eq!((back.width(), back.height()), (32, 20));
+        }
+    }
+}

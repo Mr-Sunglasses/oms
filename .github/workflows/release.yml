@@ -13,31 +13,47 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # Each architecture builds on its own runner, at the same time.
+  build:
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
     runs-on: macos-latest
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
-      # Signing runs only once the Apple secrets exist (see README, "Releasing").
-      CAN_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
-
-      - name: Install Rust targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Build
         run: |
-          cargo build --release --locked --target aarch64-apple-darwin
-          cargo build --release --locked --target x86_64-apple-darwin
+          rustup target add ${{ matrix.target }}
+          cargo build --release --locked --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oms-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/oms
+          retention-days: 1
+
+  release:
+    needs: build
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      # Signing runs only once the Apple secrets exist (see README, "Contributing").
+      CAN_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: builds
 
       - name: Make a universal binary
         run: |
           mkdir dist
           lipo -create -output dist/oms \
-            target/aarch64-apple-darwin/release/oms \
-            target/x86_64-apple-darwin/release/oms
+            builds/oms-aarch64-apple-darwin/oms \
+            builds/oms-x86_64-apple-darwin/oms
+          chmod +x dist/oms
           dist/oms --version
 
       - name: Sign and notarize
@@ -76,6 +92,7 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" oms-macos-universal.tar.gz oms-macos-universal.tar.gz.sha256 --clobber
