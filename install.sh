@@ -28,7 +28,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 say "Downloading oms ($VERSION)..."
-if curl -fsSL "$url" -o "$tmp/oms.tar.gz"; then
+if curl -fL --progress-bar --connect-timeout 15 --max-time 300 --retry 3 "$url" -o "$tmp/oms.tar.gz"; then
   tar -xzf "$tmp/oms.tar.gz" -C "$tmp"
 elif command -v cargo >/dev/null; then
   say "No prebuilt binary found, building from source with cargo..."

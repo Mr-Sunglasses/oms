@@ -35,8 +35,8 @@ pub fn self_update() -> Result<bool> {
         println!("Downloading oms {latest}...");
         let base = format!("https://github.com/{REPO}/releases/download/{tag}/{ASSET}");
         let archive = tmp.join(ASSET);
-        curl(&base, &archive)?;
-        curl(&format!("{base}.sha256"), &tmp.join("sha256"))?;
+        curl(&base, &archive, true)?;
+        curl(&format!("{base}.sha256"), &tmp.join("sha256"), false)?;
         verify(&archive, &tmp.join("sha256"))?;
         run(Command::new("tar")
             .arg("-xzf")
@@ -89,9 +89,28 @@ fn tempdir() -> Result<std::path::PathBuf> {
     Ok(dir)
 }
 
-fn curl(url: &str, dest: &Path) -> Result<()> {
-    run(Command::new("curl").args(["-fsSL", url, "-o"]).arg(dest))
-        .with_context(|| format!("downloading {url}"))
+/// Downloads with timeouts and retries, so a stalled connection can't hang,
+/// and a progress bar for the big file.
+fn curl(url: &str, dest: &Path, progress: bool) -> Result<()> {
+    use std::io::IsTerminal;
+    let mut cmd = Command::new("curl");
+    cmd.args([
+        "-fL",
+        "--connect-timeout",
+        "15",
+        "--max-time",
+        "300",
+        "--retry",
+        "3",
+    ]);
+    cmd.arg(if progress && std::io::stderr().is_terminal() {
+        "--progress-bar"
+    } else {
+        "-sS"
+    });
+    run(cmd.arg(url).arg("-o").arg(dest)).with_context(|| {
+        format!("downloading {url} (check your connection and try `oms self-update` again)")
+    })
 }
 
 fn verify(archive: &Path, sum_file: &Path) -> Result<()> {
