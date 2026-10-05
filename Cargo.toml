@@ -1,0 +1,23 @@
+[package]
+name = "omarchy-switch"
+version = "0.1.0"
+edition = "2024"
+description = "Pick an Omarchy theme for Ghostty and a matching macOS wallpaper from one TUI"
+license = "MIT"
+repository = "https://github.com/Mr-Sunglasses/omarchy-switch"
+
+[dependencies]
+anyhow = "1.0.104"
+dirs = "7.0.0"
+image = "0.25.10"
+ratatui = "0.30.2"
+ratatui-image = { version = "11", default-features = false, features = ["crossterm", "image-defaults"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = "0.3.2"
+objc2-foundation = "0.3.2"
+
+[profile.release]
+lto = true
+strip = true
