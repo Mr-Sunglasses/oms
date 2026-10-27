@@ -26,7 +26,7 @@ Tab completion for your shell: add `source <(oms completions zsh)` to `~/.zshrc`
 
 ## What it does
 
-- **22 Omarchy themes** for [Ghostty](https://ghostty.org), with a live preview as you browse.
+- **23 Omarchy themes** for [Ghostty](https://ghostty.org), with a live preview as you browse.
 - **Matching wallpapers**, set on every desktop and screen at once.
 - **Light and dark mode:** pick a day theme and a night theme, and your Mac switches between them.
 - **Your apps too:** Neovim, btop, bat, tmux and the macOS accent color can follow the theme.
