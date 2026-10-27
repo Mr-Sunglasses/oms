@@ -1,5 +1,6 @@
 //! Per-frame work: finished jobs, live preview, update checks and images.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::thread;
@@ -12,15 +13,22 @@ use crate::repo::Repos;
 use crate::settings::Settings;
 use crate::{ghostty, update};
 
+/// Sent by the background download when new themes or wallpapers arrived.
+const RELOAD: &str = "reload";
+
 impl App {
-    pub fn tick(&mut self) {
+    /// Background work and timers. Returns whether the screen needs redrawing.
+    pub fn tick(&mut self) -> bool {
         self.ticks = self.ticks.wrapping_add(1);
+        // The spinner moves while something is being applied.
+        let mut changed = self.busy();
 
         if let Some((_, rx)) = &self.job
             && let Ok(done) = rx.try_recv()
             && let Some((job, _)) = self.job.take()
         {
             self.finish_job(job, done);
+            changed = true;
         }
 
         if self.live_due.is_some_and(|due| Instant::now() >= due) {
@@ -28,18 +36,57 @@ impl App {
             if let Err(e) = self.preview_selected() {
                 self.status = format!("Error: {e:#}");
             }
+            changed = true;
         }
 
-        self.poll_updates();
-        self.loader.poll();
+        changed |= self.poll_updates();
+        if self.reload_pending && !self.busy() {
+            self.reload_themes();
+            changed = true;
+        }
+        changed |= self.loader.poll();
         self.request_images();
-        self.update_preview();
-        self.update_thumbs();
+        changed |= self.update_preview();
+        changed |= self.update_thumbs();
+        changed
+    }
+
+    /// Picks up themes and wallpapers downloaded in the background, keeping
+    /// the selection and the wallpaper picked for each theme.
+    fn reload_themes(&mut self) {
+        self.reload_pending = false;
+        let Ok(themes) = self.repos.load(&self.settings) else {
+            return;
+        };
+        let chosen: HashMap<&str, &PathBuf> = self
+            .themes
+            .iter()
+            .zip(&self.wallpaper)
+            .filter_map(|(t, &i)| Some((t.slug.as_str(), t.wallpapers.get(i)?)))
+            .collect();
+        let wallpaper = themes
+            .iter()
+            .map(|t| {
+                chosen
+                    .get(t.slug.as_str())
+                    .and_then(|path| t.wallpapers.iter().position(|w| w == *path))
+                    .unwrap_or(0)
+            })
+            .collect();
+        let selected = self.theme().slug.clone();
+        self.selected = themes.iter().position(|t| t.slug == selected).unwrap_or(0);
+        self.wallpaper = wallpaper;
+        self.themes = themes;
+        self.thumbs_for = usize::MAX;
+        self.rebuild_order();
+        self.status = "✓ Downloaded new themes and wallpapers.".into();
     }
 
     /// Handles results of the release check and the theme/wallpaper download.
-    fn poll_updates(&mut self) {
-        for message in self.updates.try_iter().collect::<Vec<_>>() {
+    /// Returns whether any arrived.
+    fn poll_updates(&mut self) -> bool {
+        let messages: Vec<String> = self.updates.try_iter().collect();
+        for message in &messages {
             if let Some(version) = message.strip_prefix("release:") {
                 let version = version.to_string();
                 self.settings.latest_version = Some(version.clone());
@@ -52,6 +99,8 @@ impl App {
                     // Ask now, in this session.
                     self.update_prompt = Some(version);
                 }
+            } else if message == RELOAD {
+                self.reload_pending = true;
             } else if message == "current" {
                 if self.update_wanted {
                     self.update_wanted = false;
@@ -64,9 +113,10 @@ impl App {
                     self.update_available = None;
                 }
             } else if !self.busy() {
-                self.status = message;
+                self.status.clone_from(message);
             }
         }
+        !messages.is_empty()
     }
 
     /// Asks the loader for the selected picture, its theme's others (for
@@ -101,14 +151,17 @@ impl App {
     }
 
     /// Shows the selected wallpaper once it's loaded, keeping the previous
-    /// picture up until the new one has been resized.
-    fn update_preview(&mut self) {
+    /// picture up until the new one has been resized. Returns whether the
+    /// picture changed.
+    fn update_preview(&mut self) -> bool {
+        let mut changed = false;
         for response in self.encoded.try_iter().collect::<Vec<_>>() {
             if let (Ok(response), Some(shown)) = (response, self.image.as_mut())
                 && shown.protocol.update_resized_protocol(response)
             {
                 shown.ready = true;
                 self.previous = None;
+                changed = true;
             }
         }
 
@@ -131,19 +184,24 @@ impl App {
             {
                 self.previous = Some(old);
             }
+            changed = true;
         }
+        changed
     }
 
     /// Thumbnails for the selected theme, cropped to fill their boxes.
-    fn update_thumbs(&mut self) {
+    /// Returns whether any changed.
+    fn update_thumbs(&mut self) -> bool {
+        let mut changed = false;
         if self.thumbs_for != self.selected || self.thumbs_cropped_for != self.thumb_cells {
             self.thumbs.clear();
             self.thumbs_for = self.selected;
             self.thumbs_cropped_for = self.thumb_cells;
+            changed = true;
         }
         let (cols, rows) = self.thumb_cells;
         if cols == 0 || rows == 0 {
-            return;
+            return changed;
         }
         let font = self.picker.font_size();
         let target = (f64::from(cols) * f64::from(font.width))
@@ -156,13 +214,13 @@ impl App {
                     .picker
                     .new_resize_protocol(crop_to_aspect(&preview.thumb, target));
                 self.thumbs.insert(path, protocol);
+                changed = true;
             }
         }
+        changed
     }
 }
 
-/// In the background: look for a newer oms and pull new themes and wallpapers,
-/// at most every few hours. Messages come back on the channel.
 /// In the background: look for a newer oms (every launch; it's one small
 /// request) and pull new themes and wallpapers (at most every few hours).
 /// Results come back on the channel.
@@ -180,7 +238,7 @@ pub(super) fn start_update_check(repos: &Repos, settings: &mut Settings, tx: Sen
         check_release(&tx);
         if pull && let Ok(true) = repos.update() {
             let _ = ghostty::install_themes(&repos.themes);
-            let _ = tx.send("Downloaded new themes and wallpapers. Reopen oms to see them.".into());
+            let _ = tx.send(RELOAD.into());
         }
     });
 }

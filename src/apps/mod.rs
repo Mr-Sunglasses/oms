@@ -1,6 +1,8 @@
 //! Theming apps beyond Ghostty: Neovim, btop, bat, tmux and the macOS accent
 //! color. Each is opt-in (`oms apps on <app>`).
 
+mod nvim;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -57,7 +59,7 @@ pub fn apply(theme: &Theme, enabled: &[String]) -> (Vec<String>, Vec<String>) {
     let (mut done, mut failed) = (Vec::new(), Vec::new());
     for app in enabled {
         let result = match app.as_str() {
-            "nvim" => nvim(theme),
+            "nvim" => nvim::apply(theme),
             "btop" => btop(theme),
             "bat" => bat(theme),
             "tmux" => tmux(theme),
@@ -118,17 +120,6 @@ fn remove_lines(path: &Path, is_key: impl Fn(&str) -> bool) -> Result<()> {
     };
     let kept: Vec<&str> = text.lines().filter(|l| !is_key(l.trim_start())).collect();
     write(path, &(kept.join("\n") + "\n"))
-}
-
-fn nvim_file() -> PathBuf {
-    config_home().join("nvim/lua/plugins/omarchy-theme.lua")
-}
-
-fn nvim(theme: &Theme) -> Result<()> {
-    if !config_home().join("nvim/lua/plugins").exists() {
-        bail!("needs a LazyVim-style config (~/.config/nvim/lua/plugins)");
-    }
-    write(&nvim_file(), &read_app_file(theme, "neovim.lua")?)
 }
 
 fn btop_dir() -> PathBuf {
@@ -308,7 +299,7 @@ fn notify_accent_changed() {
 pub fn remove(app: &str) -> Result<()> {
     match app {
         "nvim" => {
-            let _ = fs::remove_file(nvim_file());
+            let _ = fs::remove_file(nvim::theme_file());
         }
         "btop" => {
             let _ = fs::remove_file(btop_dir().join("themes/omarchy.theme"));

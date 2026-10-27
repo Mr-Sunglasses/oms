@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use crate::repo::Repos;
+use crate::repo::{self, Repos};
 use crate::settings::{Settings, data_dir};
 use crate::{apps, daemon, ghostty, update};
 
@@ -56,6 +56,7 @@ pub fn run_checks(repos: Option<&Repos>) {
     check_config(&mut r, ghostty_bin, &config);
     check_font(&mut r, ghostty_bin, &config);
     check_downloads(&mut r, repos);
+    check_saved_themes(&mut r, repos, &settings);
     check_wallpapers(&mut r);
     check_agent(&mut r, &settings);
     check_other_agents(&mut r);
@@ -215,18 +216,54 @@ fn check_downloads(r: &mut Report, repos: Option<&Repos>) {
                         .count()
                 })
             };
+            let wallpapers = if repo::is_lazy(&repos.wallpapers) {
+                format!(
+                    "wallpapers download as you use them ({} themes so far)",
+                    count(&repos.wallpapers)
+                )
+            } else {
+                format!("{} wallpaper folders", count(&repos.wallpapers))
+            };
             r.line(
                 Level::Ok,
                 "Downloads",
                 format!(
-                    "{} themes, {} wallpaper folders in {}",
+                    "{} themes, {wallpapers}, in {}",
                     count(&repos.themes.join("themes")),
-                    count(&repos.wallpapers),
                     data_dir().display()
                 ),
             );
         }
         None => r.line(Level::Fail, "Downloads", "missing; run `oms update`"),
+    }
+}
+
+/// Favorites and light/dark themes still exist (Omarchy sometimes removes a
+/// theme; renamed ones are followed automatically).
+fn check_saved_themes(r: &mut Report, repos: Option<&Repos>, settings: &Settings) {
+    let Some(themes) = repos.and_then(|repos| repos.load(settings).ok()) else {
+        return;
+    };
+    let saved = settings.favorites.iter().chain(
+        [&settings.light, &settings.dark]
+            .into_iter()
+            .flatten()
+            .map(|c| &c.theme),
+    );
+    let mut gone: Vec<&str> = saved
+        .filter(|slug| !themes.iter().any(|t| &t.slug == *slug))
+        .map(String::as_str)
+        .collect();
+    gone.dedup();
+    if !gone.is_empty() {
+        r.line(
+            Level::Warn,
+            "Saved themes",
+            format!(
+                "{} no longer in Omarchy; pick others with `oms`",
+                gone.join(", ")
+            ),
+        );
     }
 }
 

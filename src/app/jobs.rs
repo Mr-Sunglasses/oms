@@ -59,6 +59,10 @@ impl App {
             let _ = tx.send(run_job(&step, &apps, job_wallpaper.as_deref()));
         });
         self.status = match (theme, &wallpaper) {
+            // Only its preview is here yet: the theme's pictures download first.
+            (_, Some((_, path))) if !path.exists() => {
+                format!("Downloading {}'s wallpapers…", t.name)
+            }
             (true, Some(_)) => format!("Applying {} and its wallpaper…", t.name),
             (true, None) => format!("Applying {}…", t.name),
             _ => "Setting the wallpaper…".into(),
@@ -184,10 +188,13 @@ fn run_job(step: &ConfigStep, apps: &[String], wallpaper: Option<&Path>) -> JobD
                 }
             }
         }
-        if let Some(path) = wallpaper
-            && wallpaper::set_everywhere(path).is_err()
-        {
-            done.wallpaper_fallback = Some(path.to_path_buf());
+        if let Some(path) = wallpaper {
+            // Download it here, off the main thread, so a failed download is
+            // reported as one rather than as the fallback failing.
+            crate::repo::ensure_local(path)?;
+            if wallpaper::set_everywhere(path).is_err() {
+                done.wallpaper_fallback = Some(path.to_path_buf());
+            }
         }
         Ok(())
     })();

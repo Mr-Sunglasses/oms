@@ -137,6 +137,43 @@ pub fn set_theme(config: &Path, theme: &str) -> Result<()> {
     write_config(config, Some(&with_theme(&text, theme)))
 }
 
+/// A `theme = ...` value with renamed Omarchy themes swapped for their new
+/// names, or `None` if it names none of them.
+fn follow_renames(theme: &str) -> Option<String> {
+    let mut changed = false;
+    let parts: Vec<String> = theme
+        .split(',')
+        .map(|part| {
+            let part = part.trim();
+            let (mode, name) = part
+                .split_once(':')
+                .filter(|(mode, _)| matches!(*mode, "light" | "dark"))
+                .map_or(("", part), |(mode, name)| (mode, name));
+            let renamed = crate::repo::RENAMED
+                .iter()
+                .find(|r| name == format!("Omarchy {}", r.old_name));
+            match renamed {
+                Some(r) => {
+                    changed = true;
+                    let colon = if mode.is_empty() { "" } else { ":" };
+                    format!("{mode}{colon}Omarchy {}", r.new_name)
+                }
+                None => part.to_string(),
+            }
+        })
+        .collect();
+    changed.then(|| parts.join(","))
+}
+
+/// Switches the config to the new name of a theme Omarchy renamed, so
+/// Ghostty keeps matching the wallpaper and app themes oms sets.
+pub fn follow_theme_renames(config: &Path) -> Result<()> {
+    if let Some(theme) = current_theme(config).as_deref().and_then(follow_renames) {
+        set_theme(config, &theme)?;
+    }
+    Ok(())
+}
+
 /// Ghostty reloads its config on SIGUSR2, recoloring every open window.
 pub fn reload() {
     // -a: macOS pkill skips its own ancestors by default, which would leave out
@@ -149,6 +186,19 @@ pub fn reload() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn follows_renamed_themes() {
+        assert_eq!(
+            follow_renames("Omarchy Osaka Jade").as_deref(),
+            Some("Omarchy Jade Horse")
+        );
+        assert_eq!(
+            follow_renames("light:Omarchy White,dark:Omarchy Osaka Jade").as_deref(),
+            Some("light:Omarchy White,dark:Omarchy Jade Horse")
+        );
+        assert_eq!(follow_renames("Omarchy Nord"), None);
+    }
 
     #[test]
     fn replaces_last_active_theme_line() {

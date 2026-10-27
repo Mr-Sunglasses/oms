@@ -17,8 +17,10 @@ const IMAGE_PROVIDER: &str = "com.apple.wallpaper.choice.image";
 
 /// Sets the wallpaper on every display and every Space, and makes it the
 /// default for new Spaces. Falls back to the current Space only when the
-/// wallpaper store can't be used (macOS before 14).
+/// wallpaper store can't be used (macOS before 14). Downloads the picture
+/// first if only its preview is here.
 pub fn set(path: &Path) -> Result<()> {
+    crate::repo::ensure_local(path)?;
     let path = path
         .canonicalize()
         .with_context(|| format!("{} not found", path.display()))?;
@@ -31,6 +33,7 @@ pub fn set(path: &Path) -> Result<()> {
 /// Every Space and display, through `WallpaperAgent`'s store. Safe to call off
 /// the main thread; when it fails, use `set_current_space` on the main thread.
 pub fn set_everywhere(path: &Path) -> Result<()> {
+    crate::repo::ensure_local(path)?;
     let path = path
         .canonicalize()
         .with_context(|| format!("{} not found", path.display()))?;

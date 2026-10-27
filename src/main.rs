@@ -150,6 +150,8 @@ fn main() -> Result<()> {
 
     let repos = Repos::locate(themes_dir, wallpapers_dir)?;
     ghostty::install_themes(&repos.themes)?;
+    // Best effort: a config oms can't write shouldn't stop the command.
+    let _ = ghostty::follow_theme_renames(&ghostty::config_path());
     let mut settings = Settings::load();
 
     let result = match arg(0) {
@@ -281,15 +283,22 @@ fn tui(repos: &Repos, mut settings: Settings) -> Result<()> {
 }
 
 fn run(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
+    // Draw only after input or a change from background work, so an idle
+    // picker uses next to no CPU.
+    let mut dirty = true;
     while !app.quit {
-        app.tick();
-        terminal.draw(|f| ui::draw(f, app))?;
+        dirty |= app.tick();
+        if dirty {
+            terminal.draw(|f| ui::draw(f, app))?;
+            dirty = false;
+        }
         if event::poll(Duration::from_millis(40))? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => app.handle_key(key),
                 Event::Mouse(mouse) => app.handle_mouse(mouse),
                 _ => {}
             }
+            dirty = true;
         }
     }
     Ok(())
