@@ -5,6 +5,8 @@
 Omarchy themes for your whole Mac: Ghostty, your wallpaper and your apps, switched with one key.
 
 [![CI](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Mr-Sunglasses/oms)](https://github.com/Mr-Sunglasses/oms/releases/latest) [![Website](https://img.shields.io/badge/website-oms.kanishkk.xyz-7aa2f7)](https://oms.kanishkk.xyz)
+![GitHub License](https://img.shields.io/github/license/Mr-Sunglasses/oms)
+
 
 <img src="docs/demo.gif" alt="oms demo: browsing themes with live preview, then applying one" width="860">
 
@@ -120,3 +122,5 @@ Issues and pull requests are welcome.
 ## Credits
 
 Themes and wallpapers come from [Omarchy](https://github.com/omacom/omarchy) and their original authors and artists. [MIT License](LICENSE).
+
+![Made with Rust](https://img.shields.io/badge/Made%20With-Rust-000000?style=for-the-badge)
