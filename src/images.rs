@@ -1,6 +1,7 @@
 //! Wallpaper previews: decoded on a background thread, kept small in a disk
 //! cache so they load in milliseconds, and pre-made for every wallpaper while
-//! the picker is idle.
+//! the picker is idle. A wallpaper that isn't downloaded yet is shown from the
+//! wallpaper repo's own preview.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -14,6 +15,7 @@ use std::time::Duration;
 use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ImageReader};
 
+use crate::repo;
 use crate::settings::data_dir;
 
 /// Previews are downsized to fit this, which is plenty for a terminal pane.
@@ -39,14 +41,22 @@ pub struct Loader {
 }
 
 impl Loader {
-    /// `prefetch`: wallpapers to put in the disk cache while nothing else is asked for.
+    /// `prefetch`: every wallpaper, to put in the disk cache while nothing else
+    /// is asked for. Cached previews of anything else are deleted.
     pub fn new(prefetch: Vec<PathBuf>) -> Self {
         let (requests, inbox) = channel::<PathBuf>();
         let (outbox, results) = channel::<Loaded>();
         thread::spawn(move || {
+            let cached: Vec<Option<PathBuf>> = prefetch
+                .iter()
+                .map(|p| source(p).map(|s| cache_path(&s)))
+                .collect();
+            remove_stale(cached.iter().flatten());
             let mut prefetch: VecDeque<PathBuf> = prefetch
                 .into_iter()
-                .filter(|p| !cache_path(p).exists())
+                .zip(cached)
+                .filter(|(_, cache)| cache.as_ref().is_some_and(|c| !c.exists()))
+                .map(|(p, _)| p)
                 .collect();
             let mut queue: Vec<PathBuf> = Vec::new();
             loop {
@@ -126,6 +136,32 @@ impl Loader {
     }
 }
 
+fn cache_dir() -> PathBuf {
+    data_dir().join("previews")
+}
+
+/// The picture to make a preview from: the wallpaper, or the repo's preview
+/// of it while the full picture isn't downloaded.
+fn source(path: &Path) -> Option<PathBuf> {
+    if path.exists() {
+        Some(path.to_path_buf())
+    } else {
+        repo::preview_of(path)
+    }
+}
+
+/// Deletes cached previews that no wallpaper uses any more (wallpapers that
+/// were removed, changed, or downloaded in full since).
+fn remove_stale<'a>(keep: impl Iterator<Item = &'a PathBuf>) {
+    let keep: HashSet<&PathBuf> = keep.collect();
+    for entry in fs::read_dir(cache_dir()).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "jpg") && !keep.contains(&path) {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
 /// `<data dir>/previews/<hash>.jpg`, keyed by the file's path, size and
 /// modification time, so an edited wallpaper gets a new preview.
 fn cache_path(path: &Path) -> PathBuf {
@@ -137,9 +173,7 @@ fn cache_path(path: &Path) -> PathBuf {
             modified.hash(&mut hasher);
         }
     }
-    data_dir()
-        .join("previews")
-        .join(format!("{:016x}.jpg", hasher.finish()))
+    cache_dir().join(format!("{:016x}.jpg", hasher.finish()))
 }
 
 fn decode(path: &Path) -> Result<DynamicImage, String> {
@@ -153,11 +187,12 @@ fn decode(path: &Path) -> Result<DynamicImage, String> {
 /// The small cached copy if there is one; otherwise decodes the original,
 /// shrinks it and caches that.
 fn load(path: &Path) -> Result<Preview, String> {
-    let cached = cache_path(path);
+    let path = source(path).ok_or_else(|| format!("{} not found", path.display()))?;
+    let cached = cache_path(&path);
     let image = if let Ok(image) = decode(&cached) {
         image
     } else {
-        let full = decode(path)?;
+        let full = decode(&path)?;
         let small = if full.width() > PREVIEW_SIZE.0 || full.height() > PREVIEW_SIZE.1 {
             full.thumbnail(PREVIEW_SIZE.0, PREVIEW_SIZE.1)
         } else {

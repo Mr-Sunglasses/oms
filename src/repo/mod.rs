@@ -1,15 +1,43 @@
 //! The two source repos: Ghostty theme files and wallpapers sorted by theme.
+//! How they're downloaded is in `download`.
 
+mod download;
+
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
+use self::download::{PREVIEWS_DIR, clone_with_progress, git, head};
+pub use self::download::{ensure_local, is_lazy, preview_of};
 use crate::settings::{Settings, data_dir};
 
 pub const THEMES_URL: &str = "https://github.com/Mr-Sunglasses/ghostty-omarchy-themes";
 pub const WALLPAPERS_URL: &str = "https://github.com/Mr-Sunglasses/omarchy-wallpapers";
+
+/// A theme Omarchy renamed or replaced, so saved choices can follow it.
+pub struct Renamed {
+    pub old_slug: &'static str,
+    pub old_name: &'static str,
+    pub new_slug: &'static str,
+    pub new_name: &'static str,
+}
+
+pub const RENAMED: &[Renamed] = &[Renamed {
+    old_slug: "osaka-jade",
+    old_name: "Osaka Jade",
+    new_slug: "jade-horse",
+    new_name: "Jade Horse",
+}];
+
+/// The slug a renamed theme has now.
+pub fn renamed(slug: &str) -> Option<&'static str> {
+    RENAMED
+        .iter()
+        .find(|r| r.old_slug == slug)
+        .map(|r| r.new_slug)
+}
 
 pub type Rgb = (u8, u8, u8);
 
@@ -51,11 +79,28 @@ impl Theme {
         self.name.to_lowercase().contains(&q) || self.slug.contains(&q)
     }
 
+    /// Exact match on the slug or either name, including the names it had
+    /// before Omarchy renamed it.
     pub fn matches(&self, query: &str) -> bool {
         let q = query.to_lowercase();
-        [&self.slug, &self.name, &self.ghostty_name]
+        let old = RENAMED
             .iter()
-            .any(|s| s.to_lowercase() == q)
+            .filter(|r| r.new_slug == self.slug)
+            .flat_map(|r| {
+                [
+                    r.old_slug.to_string(),
+                    r.old_name.to_string(),
+                    format!("Omarchy {}", r.old_name),
+                ]
+            });
+        [
+            self.slug.clone(),
+            self.name.clone(),
+            self.ghostty_name.clone(),
+        ]
+        .into_iter()
+        .chain(old)
+        .any(|s| s.to_lowercase() == q)
     }
 }
 
@@ -86,16 +131,14 @@ impl Repos {
         let missing = !repos.themes.exists() || !repos.wallpapers.exists();
         if missing {
             eprintln!(
-                "\x1b[1mWelcome to oms!\x1b[0m Downloading the themes and wallpapers (once, about 100 MB)…\n"
+                "\x1b[1mWelcome to oms!\x1b[0m Downloading the themes and wallpaper previews (once, about 20 MB)…\n"
             );
         }
-        for (dir, url, label) in [
-            (&repos.themes, THEMES_URL, "Themes"),
-            (&repos.wallpapers, WALLPAPERS_URL, "Wallpapers"),
-        ] {
-            if !dir.exists() {
-                clone_with_progress(url, dir, label)?;
-            }
+        if !repos.themes.exists() {
+            clone_with_progress(THEMES_URL, &repos.themes, "Themes", false)?;
+        }
+        if !repos.wallpapers.exists() {
+            clone_with_progress(WALLPAPERS_URL, &repos.wallpapers, "Wallpapers", true)?;
         }
         if missing {
             eprintln!();
@@ -141,75 +184,26 @@ impl Repos {
     }
 }
 
-/// `git clone` with a progress bar on the terminal.
-fn clone_with_progress(url: &str, dir: &Path, label: &str) -> Result<()> {
-    use std::io::{IsTerminal, Read, Write};
-    let tty = std::io::stderr().is_terminal();
-    let partial = dir.with_extension("partial");
-    let _ = fs::remove_dir_all(&partial);
-    let mut child = Command::new("git")
-        .args(["clone", "--depth", "1", "--progress", url])
-        .arg(&partial)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .context("running git (install it with `xcode-select --install`)")?;
-    let mut stderr = child.stderr.take().context("no git output")?;
-    let mut buffer = Vec::new();
-    let mut chunk = [0u8; 512];
-    let mut last = String::new();
-    let draw = |percent: usize, detail: &str| {
-        let filled = percent * 24 / 100;
-        eprint!(
-            "\r  {label:<11} [{}{}] {percent:>3}%  {detail:<20}",
-            "█".repeat(filled),
-            "░".repeat(24 - filled)
-        );
-        let _ = std::io::stderr().flush();
-    };
-    while let Ok(n) = stderr.read(&mut chunk) {
-        if n == 0 {
-            break;
-        }
-        buffer.extend_from_slice(&chunk[..n]);
-        // git redraws its progress with '\r'; parse the newest line.
-        while let Some(end) = buffer.iter().position(|&b| b == b'\r' || b == b'\n') {
-            let line: Vec<u8> = buffer.drain(..=end).collect();
-            let line = String::from_utf8_lossy(&line).trim().to_string();
-            if let Some(rest) = line.strip_prefix("Receiving objects:") {
-                let percent = rest
-                    .trim()
-                    .split('%')
-                    .next()
-                    .and_then(|p| p.trim().parse().ok())
-                    .unwrap_or(0);
-                let size = rest
-                    .split(", ")
-                    .nth(1)
-                    .map(|s| s.split(" |").next().unwrap_or("").trim().to_string())
-                    .unwrap_or_default();
-                if tty {
-                    draw(percent, &size);
-                }
-            }
-            if !line.is_empty() {
-                last = line;
+/// A theme's wallpapers: the ones on disk, plus the ones only previewed so far.
+fn theme_wallpapers(wallpapers: &Path, slug: &str) -> Vec<PathBuf> {
+    let dir = wallpapers.join(slug);
+    let mut found: BTreeSet<PathBuf> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| is_image(p))
+        .collect();
+    let previews = fs::read_dir(wallpapers.join(PREVIEWS_DIR).join(slug));
+    for entry in previews.into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if let Some(original) = name.strip_suffix(".jpg") {
+            let path = dir.join(original);
+            if is_image(&path) {
+                found.insert(path);
             }
         }
     }
-    let status = child.wait()?;
-    if !status.success() {
-        let _ = fs::remove_dir_all(&partial);
-        bail!("downloading {url} failed: {last}");
-    }
-    fs::rename(&partial, dir)?;
-    if tty {
-        draw(100, "done");
-        eprintln!();
-    } else {
-        eprintln!("{label}: downloaded");
-    }
-    Ok(())
+    found.into_iter().collect()
 }
 
 /// Image files in `paths`, which can be files or folders.
@@ -242,33 +236,6 @@ pub fn is_image(path: &Path) -> bool {
         ext.as_str(),
         "jpg" | "jpeg" | "png" | "heic" | "webp" | "tiff" | "gif"
     )
-}
-
-fn head(dir: &Path) -> Option<Vec<u8>> {
-    Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()
-        .map(|o| o.stdout)
-}
-
-/// Runs git without printing anything (it may run behind the TUI).
-fn git(dir: Option<&Path>, args: &[&str]) -> Result<()> {
-    let mut cmd = Command::new("git");
-    if let Some(dir) = dir {
-        cmd.arg("-C").arg(dir);
-    }
-    let out = cmd.args(args).output().context("running git")?;
-    if !out.status.success() {
-        bail!(
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-    Ok(())
 }
 
 fn parse_theme(path: &Path, file_name: &str, wallpapers: &Path) -> Result<Theme> {
@@ -313,13 +280,7 @@ fn parse_theme(path: &Path, file_name: &str, wallpapers: &Path) -> Result<Theme>
     if theme.slug.is_empty() {
         theme.slug = theme.name.to_lowercase().replace(' ', "-");
     }
-    if let Ok(entries) = fs::read_dir(wallpapers.join(&theme.slug)) {
-        theme.wallpapers = entries
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| is_image(p))
-            .collect();
-        theme.wallpapers.sort();
-    }
+    theme.wallpapers = theme_wallpapers(wallpapers, &theme.slug);
     theme.builtin_wallpapers = theme.wallpapers.len();
     Ok(theme)
 }
@@ -331,4 +292,132 @@ fn hex(s: &str) -> Option<Rgb> {
     }
     let n = u32::from_str_radix(s, 16).ok()?;
     Some(((n >> 16) as u8, (n >> 8) as u8, n as u8))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A fresh, empty folder for one test.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("oms-test-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn touch(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"").unwrap();
+    }
+
+    #[test]
+    fn lists_downloaded_and_previewed_wallpapers() {
+        let repo = scratch("list");
+        touch(&repo.join("nord/1-a.jpg"));
+        touch(&repo.join(".previews/nord/1-a.jpg.jpg"));
+        // Only previewed so far, keeping its own extension.
+        touch(&repo.join(".previews/nord/2-b.png.jpg"));
+        touch(&repo.join(".previews/nord/notes.txt"));
+        let found = theme_wallpapers(&repo, "nord");
+        assert_eq!(
+            found,
+            [repo.join("nord/1-a.jpg"), repo.join("nord/2-b.png")]
+        );
+
+        assert_eq!(
+            preview_of(&repo.join("nord/2-b.png")),
+            Some(repo.join(".previews/nord/2-b.png.jpg"))
+        );
+        assert_eq!(preview_of(&repo.join("nord/3-c.jpg")), None);
+        assert!(ensure_local(&repo.join("nord/1-a.jpg")).is_ok());
+        assert!(ensure_local(&repo.join("nord/3-c.jpg")).is_err());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// The real flow against a local repo: clone just the previews, then
+    /// download a theme's pictures when one is needed.
+    #[test]
+    fn downloads_a_theme_when_first_used() {
+        let dir = scratch("lazy");
+        let source = dir.join("source");
+        touch(&source.join("nord/1-a.jpg"));
+        touch(&source.join(".previews/nord/1-a.jpg.jpg"));
+        touch(&source.join("white/1-w.png"));
+        touch(&source.join(".previews/white/1-w.png.jpg"));
+        let quiet = |dir: &Path, args: &[&str]| git(Some(dir), args).unwrap();
+        quiet(&source, &["init", "-q"]);
+        quiet(&source, &["config", "uploadpack.allowFilter", "true"]);
+        quiet(&source, &["add", "-A"]);
+        quiet(
+            &source,
+            &[
+                "-c",
+                "user.name=oms",
+                "-c",
+                "user.email=oms@example.com",
+                "commit",
+                "-qm",
+                "x",
+            ],
+        );
+        let wallpapers = dir.join("wallpapers");
+        let url = format!("file://{}", source.display());
+        git(
+            None,
+            &[
+                "clone",
+                "-q",
+                "--depth",
+                "1",
+                "--filter=blob:none",
+                "--sparse",
+                &url,
+                &wallpapers.to_string_lossy(),
+            ],
+        )
+        .unwrap();
+        download::check_out_previews(&wallpapers, false, "Wallpapers").unwrap();
+
+        assert!(is_lazy(&wallpapers));
+        let nord = wallpapers.join("nord/1-a.jpg");
+        assert!(!nord.exists());
+        assert_eq!(
+            theme_wallpapers(&wallpapers, "nord"),
+            std::slice::from_ref(&nord)
+        );
+        ensure_local(&nord).unwrap();
+        assert!(nord.exists());
+        assert!(!wallpapers.join("white/1-w.png").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn finds_renamed_themes_by_their_old_names() {
+        let theme = Theme {
+            name: "Jade Horse".into(),
+            ghostty_name: "Omarchy Jade Horse".into(),
+            slug: "jade-horse".into(),
+            background: (0, 0, 0),
+            foreground: (0, 0, 0),
+            cursor: (0, 0, 0),
+            palette: [(0, 0, 0); 16],
+            accent: (0, 0, 0),
+            wallpapers: Vec::new(),
+            builtin_wallpapers: 0,
+            apps_dir: PathBuf::new(),
+        };
+        for query in [
+            "jade-horse",
+            "Jade Horse",
+            "osaka-jade",
+            "Osaka Jade",
+            "omarchy osaka jade",
+        ] {
+            assert!(theme.matches(query), "{query}");
+        }
+        assert!(!theme.matches("nord"));
+        assert_eq!(renamed("osaka-jade"), Some("jade-horse"));
+        assert_eq!(renamed("nord"), None);
+    }
 }

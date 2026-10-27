@@ -274,6 +274,8 @@ pub fn wallpapers(repos: &Repos, settings: &mut Settings, args: &[String]) -> Re
             for (i, path) in theme.wallpapers.iter().enumerate() {
                 let mark = if theme.is_custom_wallpaper(i) {
                     " (yours)"
+                } else if !path.exists() {
+                    " (downloads when used)"
                 } else {
                     ""
                 };

@@ -126,6 +126,9 @@ pub struct App {
     updates_tx: Sender<String>,
     /// Asking "update now?" in a popup.
     pub update_prompt: Option<String>,
+    repos: Repos,
+    /// New themes or wallpapers were downloaded; reload once nothing is running.
+    reload_pending: bool,
     /// `U` was pressed before the answer was known.
     update_wanted: bool,
     job: Option<(Job, Receiver<JobDone>)>,
@@ -231,6 +234,8 @@ impl App {
             updates,
             updates_tx,
             update_prompt: None,
+            repos: repos.clone(),
+            reload_pending: false,
             update_wanted: false,
             job: None,
             undo: Vec::new(),
