@@ -84,7 +84,7 @@
    "#dfeaf0",
    "#ffcead"
   ],
-  "wallpapers": 3
+  "wallpapers": 4
  },
  {
   "slug": "everforest",
@@ -201,6 +201,35 @@
    "#ddf7ff"
   ],
   "wallpapers": 3
+ },
+ {
+  "slug": "jade-horse",
+  "name": "Jade Horse",
+  "mode": "dark",
+  "bg": "#142620",
+  "fg": "#dfede5",
+  "cursor": "#f0faf4",
+  "selection": "#2b5147",
+  "accent": "#8bcbb1",
+  "palette": [
+   "#142620",
+   "#d88d91",
+   "#8bcbb1",
+   "#c5cc91",
+   "#96b7d0",
+   "#b7a1c8",
+   "#86c7c5",
+   "#dfede5",
+   "#64887b",
+   "#e6a6aa",
+   "#a7dfc5",
+   "#dce1ac",
+   "#b0cde3",
+   "#cfbce0",
+   "#a2dcda",
+   "#f0faf4"
+  ],
+  "wallpapers": 4
  },
  {
   "slug": "kanagawa",
@@ -406,35 +435,6 @@
   "wallpapers": 4
  },
  {
-  "slug": "osaka-jade",
-  "name": "Osaka Jade",
-  "mode": "dark",
-  "bg": "#111c18",
-  "fg": "#C1C497",
-  "cursor": "#F7E8B2",
-  "selection": "#32473B",
-  "accent": "#509475",
-  "palette": [
-   "#111c18",
-   "#FF5345",
-   "#549e6a",
-   "#459451",
-   "#509475",
-   "#D2689C",
-   "#2DD5B7",
-   "#C1C497",
-   "#53685B",
-   "#db9f9c",
-   "#63b07a",
-   "#E5C736",
-   "#ACD4CF",
-   "#75bbb3",
-   "#8CD3CB",
-   "#F7E8B2"
-  ],
-  "wallpapers": 4
- },
- {
   "slug": "retro-82",
   "name": "Retro 82",
   "mode": "dark",
@@ -551,6 +551,35 @@
   "wallpapers": 5
  },
  {
+  "slug": "starship",
+  "name": "Starship",
+  "mode": "dark",
+  "bg": "#1c1c1e",
+  "fg": "#f5f5f7",
+  "cursor": "#ffffff",
+  "selection": "#3a3a3c",
+  "accent": "#ff9f0a",
+  "palette": [
+   "#1c1c1e",
+   "#ff5f4a",
+   "#ff9f0a",
+   "#ffc27a",
+   "#8fb8de",
+   "#ff8fa3",
+   "#a6dcef",
+   "#f5f5f7",
+   "#8e8e93",
+   "#ff8373",
+   "#ffb340",
+   "#ffd8a8",
+   "#b5d0ea",
+   "#ffb3c1",
+   "#cdeefa",
+   "#ffffff"
+  ],
+  "wallpapers": 4
+ },
+ {
   "slug": "tokyo-night",
   "name": "Tokyo Night",
   "mode": "dark",
@@ -577,7 +606,7 @@
    "#0db9d7",
    "#c0caf5"
   ],
-  "wallpapers": 8
+  "wallpapers": 9
  },
  {
   "slug": "vantablack",
