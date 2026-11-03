@@ -20,7 +20,7 @@ jobs:
         target: [aarch64-apple-darwin, x86_64-apple-darwin]
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref_name }}
 
@@ -29,7 +29,7 @@ jobs:
           rustup target add ${{ matrix.target }}
           cargo build --release --locked --target ${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: oms-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/oms
@@ -43,7 +43,7 @@ jobs:
       # Signing runs only once the Apple secrets exist (see README, "Contributing").
       CAN_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: builds
 
