@@ -1,10 +1,15 @@
 //! oms: pick an Omarchy theme for Ghostty and a matching macOS
 //! wallpaper from one TUI.
 
+// One clear error instead of hundreds of missing AppKit imports.
+#[cfg(not(target_os = "macos"))]
+compile_error!("oms only runs on macOS (it sets the macOS wallpaper and uses a launchd agent)");
+
 mod actions;
 mod app;
 mod apps;
 mod cli;
+mod clock;
 mod completions;
 mod daemon;
 mod doctor;
@@ -21,6 +26,7 @@ mod wallpaper;
 use std::io::{BufRead, IsTerminal, Write};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
@@ -35,6 +41,7 @@ use crate::app::App;
 use crate::repo::Repos;
 use crate::settings::Settings;
 
+/// `{apps}` is filled in from `apps::APPS`, so the list can't drift.
 const USAGE: &str = "\
 oms: Omarchy themes for Ghostty and matching macOS wallpapers
 
@@ -57,7 +64,7 @@ Wallpapers:
 
 Other apps:
   oms apps                          list apps that can follow the theme
-  oms apps on <app>...              theme them too: nvim btop bat tmux accent
+  oms apps on <app>...              theme them too: {apps}
   oms apps off <app>...             stop theming them (and undo it)
 
 Ghostty config:
@@ -79,7 +86,15 @@ Options:
   -h, --help           show this help
   -V, --version        show the version
 
+Environment:
+  OMS_NO_UPDATE_CHECK=1   don't check GitHub for new releases and themes
+  OMS_DATA_DIR=<dir>      keep downloads and settings somewhere else
+
 Themes can be given as a name or slug: \"Tokyo Night\", tokyo-night.";
+
+fn usage() -> String {
+    USAGE.replace("{apps}", &apps::names().join(" "))
+}
 
 /// The command line: the command and its arguments, plus `--themes` and
 /// `--wallpapers` overrides.
@@ -100,7 +115,7 @@ fn parse_args() -> Result<Option<Args>> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "-h" | "--help" => {
-                println!("{USAGE}");
+                println!("{}", usage());
                 return Ok(None);
             }
             "-V" | "--version" => {
@@ -209,7 +224,7 @@ fn main() -> Result<()> {
         Some("rotate") => cli::rotate(&mut settings, arg(1)),
         Some("apps") => cli::apps_command(&repos, &mut settings, &args[1..]),
         Some("wallpapers") => cli::wallpapers(&repos, &mut settings, &args[1..]),
-        Some(other) => bail!("unknown command {other:?}\n\n{USAGE}"),
+        Some(other) => bail!("unknown command {other:?}\n\n{}", usage()),
     };
     // After other commands, mention a new release (the picker shows its own).
     if arg(0).is_some()
@@ -271,7 +286,9 @@ fn tui(repos: &Repos, mut settings: Settings) -> Result<()> {
     let _ = execute!(std::io::stdout(), EnableMouseCapture);
     let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
     let mut app = App::new(themes, settings, picker, repos);
+    catch_stop_signals(true);
     let result = run(&mut terminal, &mut app);
+    catch_stop_signals(false);
     let restored = app.restore();
     let _ = execute!(std::io::stdout(), DisableMouseCapture);
     ratatui::restore();
@@ -286,7 +303,7 @@ fn run(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
     // Draw only after input or a change from background work, so an idle
     // picker uses next to no CPU.
     let mut dirty = true;
-    while !app.quit {
+    while !app.quit && !STOP.load(Ordering::SeqCst) {
         dirty |= app.tick();
         if dirty {
             terminal.draw(|f| ui::draw(f, app))?;
@@ -302,4 +319,64 @@ fn run(terminal: &mut DefaultTerminal, app: &mut App) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Set by SIGHUP (the terminal window was closed) or SIGTERM, so the picker
+/// quits through the normal path and puts back the config after a live preview.
+static STOP: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn on_stop_signal(_: libc::c_int) {
+    STOP.store(true, Ordering::SeqCst);
+}
+
+/// Routes SIGHUP and SIGTERM to `STOP` while the picker runs (`true`), or
+/// back to their default of ending the process (`false`). Without
+/// `SA_RESTART`, a read the picker is blocked in returns early, so the loop
+/// sees `STOP` at once.
+fn catch_stop_signals(catch: bool) {
+    let handler = if catch {
+        on_stop_signal as extern "C" fn(libc::c_int) as libc::sighandler_t
+    } else {
+        libc::SIG_DFL
+    };
+    // SAFETY: `sigaction` is plain old data, so all-zero is a valid start
+    // (an empty mask and no flags).
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = handler;
+    for signal in [libc::SIGHUP, libc::SIGTERM] {
+        // SAFETY: `action` is a live, initialised value; the handler only
+        // stores to an atomic, which is async-signal-safe.
+        unsafe {
+            libc::sigaction(signal, &raw const action, std::ptr::null_mut());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::usage;
+    use crate::{apps, completions};
+
+    #[test]
+    fn help_lists_every_command_and_app() {
+        let usage = usage();
+        for command in completions::COMMANDS {
+            assert!(usage.contains(&format!("oms {command}")), "{command}");
+        }
+        // And every command in the help can be completed.
+        for line in usage.lines() {
+            // `oms` on its own (the picker) is followed by spaces.
+            if let Some(rest) = line.trim().strip_prefix("oms ")
+                && !rest.starts_with(' ')
+            {
+                let command = rest.split_whitespace().next().unwrap_or_default();
+                assert!(
+                    command.starts_with('<') || completions::COMMANDS.contains(&command),
+                    "{command} is in the help but not in completions::COMMANDS"
+                );
+            }
+        }
+        assert!(usage.contains(&apps::names().join(" ")));
+        assert!(!usage.contains("{apps}"));
+    }
 }

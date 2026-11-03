@@ -1,7 +1,7 @@
 //! `oms self-update`: replace this binary with the latest GitHub release.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
@@ -14,6 +14,14 @@ pub fn available() -> Option<String> {
     let tag = latest_tag().ok()?;
     let latest = tag.trim_start_matches('v');
     is_newer(latest, env!("CARGO_PKG_VERSION")).then(|| latest.to_string())
+}
+
+/// Set to skip the background checks for new oms releases and new themes.
+pub const NO_CHECK_ENV: &str = "OMS_NO_UPDATE_CHECK";
+
+/// Whether background update checks are off (`OMS_NO_UPDATE_CHECK=1`).
+pub fn checks_disabled() -> bool {
+    std::env::var_os(NO_CHECK_ENV).is_some_and(|v| !v.is_empty() && v != "0")
 }
 
 /// Returns whether a newer version was installed.
@@ -92,7 +100,7 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     parse(latest) > parse(current)
 }
 
-fn tempdir() -> Result<std::path::PathBuf> {
+fn tempdir() -> Result<PathBuf> {
     let dir = std::env::temp_dir().join(format!("oms-update-{}", std::process::id()));
     fs::create_dir_all(&dir)?;
     Ok(dir)
@@ -146,7 +154,7 @@ fn run(cmd: &mut Command) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_newer;
+    use super::*;
 
     #[test]
     fn compares_versions_numerically() {
