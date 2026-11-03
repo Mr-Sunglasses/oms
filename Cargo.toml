@@ -18,7 +18,7 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "pn
 libc = "0.2.190"
 # Already built for ratatui-image (same version and features), so it adds
 # nothing to compile; picks random themes and wallpapers.
-rand = "0.8.5"
+rand = "0.10.3"
 ratatui = "0.30.2"
 ratatui-image = { version = "11", default-features = false, features = ["crossterm"] }
 serde = { version = "1.0.229", features = ["derive"] }
