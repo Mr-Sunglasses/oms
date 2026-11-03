@@ -110,6 +110,7 @@ impl App {
             }
             KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                 self.update_prompt = None;
+                self.reload_settings();
                 self.settings.skipped_version = Some(version.clone());
                 let _ = self.settings.save();
                 self.status =
@@ -214,6 +215,7 @@ impl App {
 
     pub(super) fn toggle_favorite(&mut self) -> Result<()> {
         let slug = self.theme().slug.clone();
+        self.reload_settings();
         let added = self.settings.toggle_favorite(&slug);
         self.settings.save()?;
         self.status = if added {
@@ -234,6 +236,7 @@ impl App {
             wallpaper: self.wallpaper[self.selected],
         };
         self.push_undo();
+        self.reload_settings();
         let outcome = actions::set_mode_theme(&self.themes, dark, choice, &mut self.settings)?;
         self.saved_config = ghostty::read_config(&self.config);
         self.applied_theme = ghostty::current_theme(&self.config);

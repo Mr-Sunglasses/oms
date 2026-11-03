@@ -54,13 +54,9 @@ fn plist_path() -> PathBuf {
         .join(format!("{}.plist", label()))
 }
 
-fn domain() -> String {
-    let uid = Command::new("id")
-        .arg("-u")
-        .output()
-        .map(|o| o.stdout)
-        .unwrap_or_default();
-    format!("gui/{}", String::from_utf8_lossy(&uid).trim())
+/// launchd's domain for this user's agents.
+pub fn domain() -> String {
+    format!("gui/{}", crate::clock::uid())
 }
 
 pub fn is_installed() -> bool {
@@ -242,12 +238,7 @@ pub fn is_dark() -> bool {
 }
 
 fn log(message: &str) {
-    let out = Command::new("date")
-        .arg("+%F %T")
-        .output()
-        .map(|o| o.stdout)
-        .unwrap_or_default();
-    eprintln!("{} {message}", String::from_utf8_lossy(&out).trim());
+    eprintln!("{} {message}", crate::clock::log_stamp());
 }
 
 /// Tells the agent (if it's running) to reread the settings.

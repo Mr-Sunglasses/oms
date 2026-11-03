@@ -393,6 +393,86 @@ mod tests {
     }
 
     #[test]
+    fn reads_hex_colors() {
+        assert_eq!(hex("#2e3440"), Some((0x2e, 0x34, 0x40)));
+        assert_eq!(hex("FFFFFF"), Some((255, 255, 255)));
+        assert_eq!(hex("#fff"), None);
+        assert_eq!(hex("#gggggg"), None);
+    }
+
+    #[test]
+    fn parses_a_ghostty_theme_file() {
+        let dir = scratch("parse");
+        let file = dir.join("themes/Omarchy Nord");
+        touch(&file);
+        fs::write(
+            &file,
+            "# Omarchy Nord\n\
+             # Ported from Omarchy theme 'nord' (https://github.com/omacom/omarchy)\n\n\
+             background = #2e3440\n\
+             foreground = #d8dee9\n\
+             cursor-color = #eceff4\n\
+             palette = 1=#bf616a\n\
+             palette = 15=#d8dee9\n\
+             palette = 16=#000000\n\
+             split-divider-color = #81a1c1\n",
+        )
+        .unwrap();
+        let wallpapers = dir.join("wallpapers");
+        touch(&wallpapers.join("nord/1-a.png"));
+        touch(&wallpapers.join("nord/notes.txt"));
+
+        let theme = parse_theme(&file, "Omarchy Nord", &wallpapers).unwrap();
+        assert_eq!(theme.name, "Nord");
+        assert_eq!(theme.ghostty_name, "Omarchy Nord");
+        assert_eq!(theme.slug, "nord");
+        assert_eq!(theme.background, (0x2e, 0x34, 0x40));
+        assert_eq!(theme.cursor, (0xec, 0xef, 0xf4));
+        assert_eq!(theme.accent, (0x81, 0xa1, 0xc1));
+        assert_eq!(theme.palette[1], (0xbf, 0x61, 0x6a));
+        assert_eq!(theme.palette[15], (0xd8, 0xde, 0xe9));
+        // Out-of-range palette entries are ignored, untouched ones keep the default.
+        assert_eq!(theme.palette[2], (128, 128, 128));
+        assert_eq!(theme.wallpapers, [wallpapers.join("nord/1-a.png")]);
+        assert_eq!(theme.builtin_wallpapers, 1);
+        assert!(!theme.is_light());
+
+        // Without the "Omarchy theme '…'" line the slug comes from the name.
+        let plain = dir.join("themes/Omarchy Tokyo Night");
+        fs::write(&plain, "background = #f0f0f0\n").unwrap();
+        let theme = parse_theme(&plain, "Omarchy Tokyo Night", &wallpapers).unwrap();
+        assert_eq!(theme.slug, "tokyo-night");
+        assert!(theme.is_light());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn expands_wallpaper_files_and_folders() {
+        let dir = scratch("expand");
+        touch(&dir.join("pics/b.JPG"));
+        touch(&dir.join("pics/a.webp"));
+        touch(&dir.join("pics/readme.md"));
+        touch(&dir.join("one.heic"));
+        let found = expand_wallpapers(&[
+            dir.join("pics"),
+            dir.join("one.heic"),
+            dir.join("notes.txt"),
+            dir.join("missing.jpg"),
+        ]);
+        assert_eq!(
+            found,
+            [
+                dir.join("pics/a.webp"),
+                dir.join("pics/b.JPG"),
+                dir.join("one.heic"),
+                // A missing picture is kept; it may be on a drive that isn't mounted.
+                dir.join("missing.jpg"),
+            ]
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn finds_renamed_themes_by_their_old_names() {
         let theme = Theme {
             name: "Jade Horse".into(),

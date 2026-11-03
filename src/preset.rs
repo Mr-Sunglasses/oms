@@ -4,7 +4,6 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
@@ -311,8 +310,7 @@ fn restore() -> Result<()> {
 
 /// `config` -> `config.oms-20261005-120000.bak`, next to the original.
 fn backup_path(path: &Path) -> Result<PathBuf> {
-    let out = Command::new("date").arg("+%Y%m%d-%H%M%S").output()?;
-    let stamp = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let stamp = crate::clock::file_stamp();
     let name = path.file_name().context("bad path")?.to_string_lossy();
     Ok(path.with_file_name(format!("{name}.oms-{stamp}.bak")))
 }

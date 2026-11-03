@@ -290,11 +290,7 @@ fn check_agent(r: &mut Report, settings: &Settings) {
         "launchctl",
         &[
             "print",
-            &format!(
-                "gui/{}/{}",
-                run("id", &["-u"]).unwrap_or_default(),
-                daemon::label()
-            ),
+            &format!("{}/{}", daemon::domain(), daemon::label()),
         ],
     )
     .is_some_and(|out| out.contains("state = running"));
@@ -317,7 +313,7 @@ fn check_agent(r: &mut Report, settings: &Settings) {
 /// No other oms agent is left behind (e.g. by a run with a different
 /// `OMS_DATA_DIR`); one would keep switching the wallpaper on its own.
 fn check_other_agents(r: &mut Report) {
-    let uid = run("id", &["-u"]).unwrap_or_default();
+    let domain = daemon::domain();
     for agent in daemon::other_agents() {
         let program = match &agent.program {
             Some(p) if p.exists() => p.display().to_string(),
@@ -328,7 +324,7 @@ fn check_other_agents(r: &mut Report) {
             Level::Fail,
             "Other agent",
             format!(
-                "{} runs {program} and can change your wallpaper; remove it with\n{:21}launchctl bootout gui/{uid}/{}; rm '{}'",
+                "{} runs {program} and can change your wallpaper; remove it with\n{:21}launchctl bootout {domain}/{}; rm '{}'",
                 agent.label,
                 "",
                 agent.label,

@@ -2,13 +2,28 @@
 
 use anyhow::{Result, bail};
 
-const COMMANDS: &str = "apply list status auto rotate wallpapers apps config update self-update doctor uninstall completions";
+/// Every command a user types. A test in main.rs checks this against `--help`.
+pub const COMMANDS: &[&str] = &[
+    "apply",
+    "list",
+    "status",
+    "auto",
+    "rotate",
+    "wallpapers",
+    "apps",
+    "config",
+    "update",
+    "self-update",
+    "doctor",
+    "uninstall",
+    "completions",
+];
 
 const ZSH: &str = r#"#compdef oms
 # oms completions for zsh. Install: oms completions zsh > "${fpath[1]}/_oms"
 _oms() {
   local -a commands themes
-  commands=(${=OMS_COMMANDS})
+  commands=(OMS_COMMANDS)
   if (( CURRENT == 2 )); then
     _describe 'command' commands
     return
@@ -22,13 +37,18 @@ _oms() {
       else _files; fi ;;
     apps)
       if (( CURRENT == 3 )); then _values 'action' on off
-      else _values 'app' nvim btop bat tmux accent; fi ;;
+      else _values 'app' OMS_APPS; fi ;;
     config) (( CURRENT == 3 )) && _values 'action' install show sections restore ;;
     rotate) _values 'interval' 15m 30m 1h 2h 1d off ;;
     completions) _values 'shell' zsh bash fish ;;
   esac
 }
-compdef _oms oms
+# Autoloaded from $fpath (e.g. by Homebrew): complete now. Sourced: register.
+if [[ $funcstack[1] == _oms ]]; then
+  _oms "$@"
+else
+  compdef _oms oms
+fi
 "#;
 
 const BASH: &str = r#"# oms completions for bash. Install: oms completions bash > ~/.local/share/bash-completion/completions/oms
@@ -45,7 +65,7 @@ _oms() {
       else COMPREPLY=($(compgen -f -- "$cur")); fi ;;
     apps)
       if (( COMP_CWORD == 2 )); then COMPREPLY=($(compgen -W "on off" -- "$cur"))
-      else COMPREPLY=($(compgen -W "nvim btop bat tmux accent" -- "$cur")); fi ;;
+      else COMPREPLY=($(compgen -W "OMS_APPS" -- "$cur")); fi ;;
     config) COMPREPLY=($(compgen -W "install show sections restore" -- "$cur")) ;;
     rotate) COMPREPLY=($(compgen -W "15m 30m 1h 2h 1d off" -- "$cur")) ;;
     completions) COMPREPLY=($(compgen -W "zsh bash fish" -- "$cur")) ;;
@@ -60,17 +80,17 @@ complete -c oms -f
 complete -c oms -n "not __fish_seen_subcommand_from $commands" -a "$commands"
 complete -c oms -n "__fish_seen_subcommand_from apply auto" -a "(oms list --names 2>/dev/null)"
 complete -c oms -n "__fish_seen_subcommand_from wallpapers" -a "add remove list (oms list --names 2>/dev/null)"
-complete -c oms -n "__fish_seen_subcommand_from apps" -a "on off nvim btop bat tmux accent"
+complete -c oms -n "__fish_seen_subcommand_from apps" -a "on off OMS_APPS"
 complete -c oms -n "__fish_seen_subcommand_from config" -a "install show sections restore"
 complete -c oms -n "__fish_seen_subcommand_from rotate" -a "15m 30m 1h 2h 1d off"
 complete -c oms -n "__fish_seen_subcommand_from completions" -a "zsh bash fish"
 "#;
 
 pub fn print(shell: Option<&str>) -> Result<()> {
-    let script = match shell {
-        Some("zsh") => ZSH.replace("${=OMS_COMMANDS}", COMMANDS),
-        Some("bash") => BASH.replace("OMS_COMMANDS", COMMANDS),
-        Some("fish") => FISH.replace("OMS_COMMANDS", COMMANDS),
+    let template = match shell {
+        Some("zsh") => ZSH,
+        Some("bash") => BASH,
+        Some("fish") => FISH,
         _ => bail!(
             "which shell? Add one of these to your shell's config:\n\n  \
              zsh:   source <(oms completions zsh)\n  \
@@ -78,6 +98,29 @@ pub fn print(shell: Option<&str>) -> Result<()> {
              fish:  oms completions fish | source"
         ),
     };
-    print!("{script}");
+    print!("{}", script(template));
     Ok(())
+}
+
+/// Fills in the command and app lists.
+fn script(template: &str) -> String {
+    template
+        .replace("OMS_COMMANDS", &COMMANDS.join(" "))
+        .replace("OMS_APPS", &crate::apps::names().join(" "))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scripts_name_every_command_and_app() {
+        for template in [ZSH, BASH, FISH] {
+            let script = script(template);
+            assert!(!script.contains("OMS_"), "{script}");
+            for word in COMMANDS.iter().chain(crate::apps::names().iter()) {
+                assert!(script.contains(word), "{word} missing");
+            }
+        }
+    }
 }

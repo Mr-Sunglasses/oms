@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -70,14 +70,41 @@ fn path() -> PathBuf {
 
 impl Settings {
     pub fn load() -> Self {
-        let mut settings: Self = fs::read_to_string(path())
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
+        let (mut settings, problem) = Self::load_from(&path());
+        if let Some(problem) = problem {
+            eprintln!("oms: {problem}");
+        }
         if settings.follow_renames() {
             let _ = settings.save();
         }
         settings
+    }
+
+    /// Reads settings from `path`; a missing file means defaults. A file that
+    /// can't be parsed is moved aside to `settings.json.broken` rather than
+    /// being overwritten by the next save, and the second value says so.
+    fn load_from(path: &Path) -> (Self, Option<String>) {
+        let Ok(text) = fs::read_to_string(path) else {
+            return (Self::default(), None);
+        };
+        match serde_json::from_str(&text) {
+            Ok(settings) => (settings, None),
+            Err(e) => {
+                let broken = path.with_extension("json.broken");
+                let problem = match fs::rename(path, &broken) {
+                    Ok(()) => format!(
+                        "couldn't read {} ({e}); kept it as {} and started with default settings",
+                        path.display(),
+                        broken.display()
+                    ),
+                    Err(_) => format!(
+                        "couldn't read {} ({e}); using default settings",
+                        path.display()
+                    ),
+                };
+                (Self::default(), Some(problem))
+            }
+        }
     }
 
     /// Points saved theme slugs at their new names after Omarchy renamed or
@@ -176,6 +203,70 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("oms-test-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn round_trips_through_json() {
+        let settings = Settings {
+            favorites: vec!["nord".into()],
+            light: Some(Choice {
+                theme: "white".into(),
+                wallpaper: 1,
+            }),
+            auto: true,
+            rotate_minutes: Some(30),
+            apps: vec!["bat".into()],
+            custom_wallpapers: BTreeMap::from([("nord".into(), vec![PathBuf::from("/p")])]),
+            skipped_version: Some("0.9.0".into()),
+            ..Settings::default()
+        };
+        let dir = scratch("roundtrip");
+        let path = dir.join("settings.json");
+        fs::write(&path, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+        let (back, problem) = Settings::load_from(&path);
+        assert!(problem.is_none());
+        assert_eq!(
+            serde_json::to_value(&back).unwrap(),
+            serde_json::to_value(&settings).unwrap()
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reads_older_files_with_missing_fields() {
+        let dir = scratch("old");
+        let path = dir.join("settings.json");
+        fs::write(&path, r#"{"favorites": ["nord"]}"#).unwrap();
+        let (settings, problem) = Settings::load_from(&path);
+        assert!(problem.is_none());
+        assert_eq!(settings.favorites, ["nord"]);
+        assert!(!settings.auto && settings.apps.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn keeps_a_corrupt_file_instead_of_overwriting_it() {
+        let dir = scratch("corrupt");
+        let path = dir.join("settings.json");
+        fs::write(&path, "{ not json").unwrap();
+        let (settings, problem) = Settings::load_from(&path);
+        assert_eq!(settings.favorites, Vec::<String>::new());
+        assert!(problem.unwrap().contains("settings.json.broken"));
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read_to_string(dir.join("settings.json.broken")).unwrap(),
+            "{ not json"
+        );
+        // No file at all is not a problem.
+        assert!(Settings::load_from(&path).1.is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn follows_renamed_themes() {

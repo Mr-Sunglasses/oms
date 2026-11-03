@@ -24,4 +24,18 @@ jobs:
       - name: Test
         run: cargo test --locked
       - name: Install script
-        run: bash -n install.sh
+        # macOS runners don't ship shellcheck.
+        run: |
+          command -v shellcheck >/dev/null || brew install shellcheck
+          bash -n install.sh && shellcheck install.sh
+      - name: Website theme count
+        # site/build.py keeps index.html's theme count in step with themes.json.
+        run: |
+          python3 - <<'PY'
+          import json, re
+          count = len(json.load(open("site/themes.json")))
+          html = open("site/index.html").read()
+          found = set(re.findall(r"Omarchy's (\d+) themes|<b>(\d+) Omarchy themes</b>", html))
+          numbers = {int(n) for pair in found for n in pair if n}
+          assert numbers == {count}, f"index.html says {numbers}, themes.json has {count}; run site/build.py"
+          PY

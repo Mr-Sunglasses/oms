@@ -53,6 +53,16 @@ def main():
         })
         print(f"{slug:18} {thumb.stat().st_size // 1024} KB")
     (SITE / "themes.json").write_text(json.dumps(out, indent=1) + "\n")
+    update_count(len(out))
+
+
+def update_count(count):
+    """Puts the number of themes into index.html (CI checks they match)."""
+    index = SITE / "index.html"
+    html = index.read_text()
+    html = re.sub(r"Omarchy's \d+ themes", f"Omarchy's {count} themes", html)
+    html = re.sub(r"<b>\d+ Omarchy themes</b>", f"<b>{count} Omarchy themes</b>", html)
+    index.write_text(html)
 
 
 if __name__ == "__main__":

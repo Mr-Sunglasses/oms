@@ -121,3 +121,34 @@ fn center_image(area: Rect, (w, h): (u32, u32), cell_aspect: f64) -> Rect {
 fn centered(text: String) -> Paragraph<'static> {
     Paragraph::new(vec![Line::raw(""), Line::raw(text).dark_gray()]).alignment(Alignment::Center)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn makes_wallpaper_names_readable() {
+        assert_eq!(
+            pretty_name(Path::new("2-shaded-entrance.jpg")),
+            "Shaded Entrance"
+        );
+        assert_eq!(
+            pretty_name(Path::new("/a/b/kanagawa_wave.png")),
+            "Kanagawa Wave"
+        );
+        assert_eq!(pretty_name(Path::new("1.jpg")), "1");
+    }
+
+    #[test]
+    fn centers_pictures_at_their_aspect_ratio() {
+        let area = Rect::new(10, 5, 100, 40);
+        // Cells twice as tall as wide: a 16:10 picture is 3.2 cells wide per row.
+        let wide = center_image(area, (1600, 1000), 0.5);
+        assert_eq!((wide.width, wide.height), (100, 31));
+        assert_eq!((wide.x, wide.y), (10, 9));
+        let tall = center_image(area, (1000, 2000), 0.5);
+        assert_eq!((tall.width, tall.height), (40, 40));
+        assert_eq!((tall.x, tall.y), (40, 5));
+    }
+}

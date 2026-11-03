@@ -27,8 +27,20 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# Every release publishes a SHA-256 of its archive; refuse anything that
+# doesn't match it (a truncated download, or a tampered mirror).
+verify() {
+  curl -fsSL --connect-timeout 15 --max-time 60 --retry 3 "$url.sha256" -o "$tmp/oms.tar.gz.sha256" ||
+    die "could not download the checksum $url.sha256"
+  expected=$(cut -d ' ' -f 1 < "$tmp/oms.tar.gz.sha256")
+  actual=$(shasum -a 256 "$tmp/oms.tar.gz" | cut -d ' ' -f 1)
+  [ -n "$expected" ] && [ "$expected" = "$actual" ] ||
+    die "checksum mismatch for $url (expected $expected, got $actual); not installing"
+}
+
 say "Downloading oms ($VERSION)..."
 if curl -fL --progress-bar --connect-timeout 15 --max-time 300 --retry 3 "$url" -o "$tmp/oms.tar.gz"; then
+  verify
   tar -xzf "$tmp/oms.tar.gz" -C "$tmp"
 elif command -v cargo >/dev/null; then
   say "No prebuilt binary found, building from source with cargo..."

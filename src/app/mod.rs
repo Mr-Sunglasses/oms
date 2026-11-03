@@ -306,6 +306,12 @@ impl App {
         self.job.is_some()
     }
 
+    /// Rereads the settings before changing them, so a change the background
+    /// agent made meanwhile (a rotated wallpaper, say) isn't saved over.
+    fn reload_settings(&mut self) {
+        self.settings = Settings::load();
+    }
+
     /// Favorites, then recently applied themes, then the rest, each matching
     /// the filter and the light/dark choice.
     fn rebuild_order(&mut self) {
@@ -351,6 +357,14 @@ impl App {
 
     fn position(&self) -> Option<usize> {
         self.order.iter().position(|(i, _)| *i == self.selected)
+    }
+}
+
+impl Drop for App {
+    /// Puts the user's config back after a live preview even when the picker
+    /// panics, since the normal `restore` call is then skipped.
+    fn drop(&mut self) {
+        let _ = self.restore();
     }
 }
 

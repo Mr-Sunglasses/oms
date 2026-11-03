@@ -89,6 +89,7 @@ impl App {
         for message in &messages {
             if let Some(version) = message.strip_prefix("release:") {
                 let version = version.to_string();
+                self.reload_settings();
                 self.settings.latest_version = Some(version.clone());
                 let _ = self.settings.save();
                 self.update_available = Some(version.clone());
@@ -108,6 +109,7 @@ impl App {
                         format!("✓ oms {} is the latest version.", env!("CARGO_PKG_VERSION"));
                 }
                 if self.settings.latest_version.is_some() {
+                    self.reload_settings();
                     self.settings.latest_version = None;
                     let _ = self.settings.save();
                     self.update_available = None;
@@ -224,7 +226,11 @@ impl App {
 /// In the background: look for a newer oms (every launch; it's one small
 /// request) and pull new themes and wallpapers (at most every few hours).
 /// Results come back on the channel.
+/// Nothing happens with `OMS_NO_UPDATE_CHECK=1`.
 pub(super) fn start_update_check(repos: &Repos, settings: &mut Settings, tx: Sender<String>) {
+    if update::checks_disabled() {
+        return;
+    }
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
@@ -260,5 +266,22 @@ pub(super) fn crop_to_aspect(image: &image::DynamicImage, aspect: f64) -> image:
     } else {
         let new_h = (w / aspect).round().max(1.0);
         image.crop_imm(0, ((h - new_h) / 2.0) as u32, w as u32, new_h as u32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::crop_to_aspect;
+    use image::{DynamicImage, RgbImage};
+
+    #[test]
+    fn crops_to_the_middle_at_an_aspect_ratio() {
+        let image = DynamicImage::ImageRgb8(RgbImage::new(200, 100));
+        let square = crop_to_aspect(&image, 1.0);
+        assert_eq!((square.width(), square.height()), (100, 100));
+        let wide = crop_to_aspect(&image, 4.0);
+        assert_eq!((wide.width(), wide.height()), (200, 50));
+        let same = crop_to_aspect(&image, 2.0);
+        assert_eq!((same.width(), same.height()), (200, 100));
     }
 }

@@ -321,7 +321,32 @@ pub fn wallpapers(repos: &Repos, settings: &mut Settings, args: &[String]) -> Re
 
 #[cfg(test)]
 mod tests {
-    use super::parse_minutes;
+    use super::*;
+    use crate::actions::tests::theme;
+
+    #[test]
+    fn reads_theme_and_wallpaper_choices() {
+        let themes = [theme("nord", "Nord", 3), theme("white", "White", 0)];
+        let settings = Settings::default();
+        let choice = parse_choice(&themes, "nord:2", &settings).unwrap();
+        assert_eq!((choice.theme.as_str(), choice.wallpaper), ("nord", 1));
+        let choice = parse_choice(&themes, "Nord", &settings).unwrap();
+        assert_eq!(choice.wallpaper, 0);
+        // A theme without wallpapers still works, whatever number is given.
+        assert_eq!(
+            parse_choice(&themes, "white:3", &settings).unwrap().theme,
+            "white"
+        );
+        assert!(parse_choice(&themes, "nord:9", &settings).is_err());
+        assert!(parse_choice(&themes, "nope", &settings).is_err());
+    }
+
+    #[test]
+    fn formats_intervals() {
+        assert_eq!(format_minutes(30), "30m");
+        assert_eq!(format_minutes(120), "2h");
+        assert_eq!(format_minutes(90), "90m");
+    }
 
     #[test]
     fn reads_intervals() {

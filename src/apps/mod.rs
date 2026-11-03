@@ -25,6 +25,11 @@ pub const APPS: &[(&str, &str)] = &[
     ),
 ];
 
+/// The app ids, for help text and shell completion.
+pub fn names() -> Vec<&'static str> {
+    APPS.iter().map(|(id, _)| *id).collect()
+}
+
 pub fn is_known(app: &str) -> bool {
     APPS.iter().any(|(id, _)| *id == app)
 }

@@ -20,13 +20,13 @@ Omarchy themes for your whole Mac: Ghostty, your wallpaper and your apps, switch
 curl -fsSL https://kanishkk.xyz/oms | bash
 ```
 
-Then run `oms`. Works on Apple silicon and Intel Macs. When a new version is out, `oms` asks if you want to update.
+Then run `oms`. Works on Apple silicon and Intel Macs. When a new version is out, `oms` asks if you want to update. To stop it checking GitHub for new versions and themes, set `OMS_NO_UPDATE_CHECK=1`.
 
 Tab completion for your shell: add `source <(oms completions zsh)` to `~/.zshrc` (or `bash`, or `oms completions fish | source` for fish).
 
 ## What it does
 
-- **23 Omarchy themes** for [Ghostty](https://ghostty.org), with a live preview as you browse.
+- **Every Omarchy theme** for [Ghostty](https://ghostty.org), with a live preview as you browse.
 - **Matching wallpapers**, set on every desktop and screen at once.
 - **Light and dark mode:** pick a day theme and a night theme, and your Mac switches between them.
 - **Your apps too:** Neovim, btop, bat, tmux and the macOS accent color can follow the theme.
@@ -104,9 +104,9 @@ Code style:
 - Every `unsafe` block gets a `// SAFETY:` comment saying why it's sound (also enforced).
 - Comments explain *why*; names explain *what*.
 
-- **Code:** `src/`. The picker is in `app.rs` and `ui.rs`; theme, wallpaper and app changes are in `ghostty.rs`, `wallpaper.rs` and `apps.rs`.
+- **Code:** `src/`. The picker's state and input are in `src/app/`, its drawing in `src/ui/`; theme, wallpaper and app changes are in `ghostty.rs`, `wallpaper.rs` and `src/apps/`. Commands for shell completion are listed once in `completions.rs`, and apps once in `apps::APPS`; a test checks `--help` against both.
 - **Themes and wallpapers** come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers); change them there.
-- **Website:** `site/`. It deploys to [oms.kanishkk.xyz](https://oms.kanishkk.xyz) on every push to `main`.
+- **Website:** `site/`. It deploys to [oms.kanishkk.xyz](https://oms.kanishkk.xyz) on every push to `main`. After themes change, run `site/build.py`; it refreshes `themes.json`, the thumbnails and the theme count on the page.
 - **Releases:** bump `version` in `Cargo.toml` and push a tag like `v0.6.0`. GitHub Actions builds and publishes it.
 
 <details>

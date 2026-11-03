@@ -139,9 +139,76 @@ pub fn wallpaper_index(theme: &Theme, which: Option<&str>, settings: &Settings) 
     })
 }
 
+/// A random number in `0..n` (0 when `n` is 0).
 pub fn random_below(n: usize) -> usize {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.subsec_nanos() as usize ^ d.as_secs() as usize);
-    nanos % n.max(1)
+    use rand::Rng;
+    rand::thread_rng().gen_range(0..n.max(1))
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    /// A theme with `wallpapers` pictures and default colors, for tests.
+    pub(crate) fn theme(slug: &str, name: &str, wallpapers: usize) -> Theme {
+        Theme {
+            name: name.into(),
+            ghostty_name: format!("Omarchy {name}"),
+            slug: slug.into(),
+            background: (0, 0, 0),
+            foreground: (255, 255, 255),
+            cursor: (255, 255, 255),
+            palette: [(0, 0, 0); 16],
+            accent: (0, 0, 0),
+            wallpapers: (1..=wallpapers)
+                .map(|i| PathBuf::from(format!("/w/{slug}/{i}.jpg")))
+                .collect(),
+            builtin_wallpapers: wallpapers,
+            apps_dir: PathBuf::new(),
+        }
+    }
+
+    #[test]
+    fn picks_wallpapers_by_number_random_or_memory() {
+        let nord = theme("nord", "Nord", 3);
+        let mut settings = Settings::default();
+        assert_eq!(wallpaper_index(&nord, None, &settings).unwrap(), 0);
+        assert_eq!(wallpaper_index(&nord, Some("3"), &settings).unwrap(), 2);
+        assert!(wallpaper_index(&nord, Some("0"), &settings).is_err());
+        assert!(wallpaper_index(&nord, Some("4"), &settings).is_err());
+        assert!(wallpaper_index(&nord, Some("two"), &settings).is_err());
+        for _ in 0..50 {
+            assert!(wallpaper_index(&nord, Some("random"), &settings).unwrap() < 3);
+        }
+
+        settings.wallpaper_index.insert("nord".into(), 1);
+        assert_eq!(wallpaper_index(&nord, None, &settings).unwrap(), 1);
+        // A remembered index past the end (a wallpaper was removed) falls back.
+        settings.wallpaper_index.insert("nord".into(), 7);
+        assert_eq!(wallpaper_index(&nord, None, &settings).unwrap(), 0);
+
+        assert!(wallpaper_index(&theme("bare", "Bare", 0), None, &settings).is_err());
+    }
+
+    #[test]
+    fn random_stays_in_range() {
+        assert_eq!(random_below(0), 0);
+        assert_eq!(random_below(1), 0);
+        let seen: std::collections::HashSet<usize> = (0..200).map(|_| random_below(4)).collect();
+        assert_eq!(seen.len(), 4, "{seen:?}");
+    }
+
+    #[test]
+    fn finds_themes_by_slug_or_name() {
+        let themes = [
+            theme("nord", "Nord", 1),
+            theme("tokyo-night", "Tokyo Night", 1),
+        ];
+        assert_eq!(find(&themes, "tokyo-night").unwrap().slug, "tokyo-night");
+        assert_eq!(find(&themes, "Tokyo Night").unwrap().slug, "tokyo-night");
+        assert_eq!(find(&themes, "omarchy nord").unwrap().slug, "nord");
+        assert!(find(&themes, "tokyo").is_err());
+    }
 }

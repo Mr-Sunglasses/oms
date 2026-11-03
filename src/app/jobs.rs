@@ -117,6 +117,7 @@ impl App {
         self.previewing = false;
         match job {
             Job::Apply { theme, wallpaper } => {
+                self.reload_settings();
                 let mut parts = Vec::new();
                 if let Some(i) = theme {
                     let note = actions::record_theme(&self.themes[i], &mut self.settings)
