@@ -24,7 +24,10 @@ jobs:
       - name: Test
         run: cargo test --locked
       - name: Install script
-        run: bash -n install.sh && shellcheck install.sh
+        # macOS runners don't ship shellcheck.
+        run: |
+          command -v shellcheck >/dev/null || brew install shellcheck
+          bash -n install.sh && shellcheck install.sh
       - name: Website theme count
         # site/build.py keeps index.html's theme count in step with themes.json.
         run: |
