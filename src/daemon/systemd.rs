@@ -18,8 +18,10 @@ use super::{OtherAgent, label, other_label};
 use crate::settings::data_dir;
 
 /// Variables the agent needs to reach the desktop session (to set the
-/// wallpaper and read light/dark) and to find files where you keep them.
-/// systemd's user manager doesn't always have them, so the unit records them.
+/// wallpaper and read light/dark) and to find files where you keep them. The
+/// unit records only those systemd's user manager doesn't already have: most
+/// desktops hand it their session's values at each login, and a recorded
+/// copy (an Xwayland auth file, say) would go stale after the next one.
 const PASSED_ENV: &[&str] = &[
     "DISPLAY",
     "WAYLAND_DISPLAY",
@@ -41,26 +43,38 @@ const PASSED_ENV: &[&str] = &[
 /// How often to recheck light/dark mode while it's being followed.
 const APPEARANCE_POLL: Duration = Duration::from_secs(3);
 
+/// systemd's user manager environment (`systemctl --user show-environment`).
+fn manager_env() -> &'static str {
+    static ENV: OnceLock<String> = OnceLock::new();
+    ENV.get_or_init(|| systemctl(&["show-environment"]).unwrap_or_default())
+}
+
+/// A variable's value in `show-environment` output.
+fn env_value<'a>(env: &'a str, key: &str) -> Option<&'a str> {
+    env.lines()
+        .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+}
+
 /// The user unit folder systemd reads: its own `XDG_CONFIG_HOME` (which can
 /// differ from this shell's), else `~/.config`.
 fn unit_dir() -> PathBuf {
-    static DIR: OnceLock<PathBuf> = OnceLock::new();
-    DIR.get_or_init(|| {
-        systemctl(&["show-environment"])
-            .ok()
-            .and_then(|env| manager_config_home(&env))
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".config"))
-            .join("systemd/user")
-    })
-    .clone()
+    env_value(manager_env(), "XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map_or_else(
+            || dirs::home_dir().unwrap_or_default().join(".config"),
+            PathBuf::from,
+        )
+        .join("systemd/user")
 }
 
-/// `XDG_CONFIG_HOME` from `systemctl --user show-environment` output.
-fn manager_config_home(env: &str) -> Option<PathBuf> {
-    env.lines()
-        .find_map(|l| l.strip_prefix("XDG_CONFIG_HOME="))
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
+/// The variables from `current` that the manager (`show-environment` output)
+/// lacks or has a different value for.
+fn env_to_record<'a>(current: &[(&'a str, String)], manager: &str) -> Vec<(&'a str, String)> {
+    current
+        .iter()
+        .filter(|(key, value)| env_value(manager, key) != Some(value.as_str()))
+        .cloned()
+        .collect()
 }
 
 fn unit_name() -> String {
@@ -182,10 +196,11 @@ fn unit(exe: &Path, log: &Path, env: &[(&str, String)]) -> String {
 
 fn current_unit() -> Result<String> {
     let exe = std::env::current_exe()?.canonicalize()?;
-    let env: Vec<(&str, String)> = PASSED_ENV
+    let current: Vec<(&str, String)> = PASSED_ENV
         .iter()
         .filter_map(|k| std::env::var(k).ok().map(|v| (*k, v)))
         .collect();
+    let env = env_to_record(&current, manager_env());
     Ok(unit(&exe, &data_dir().join("agent.log"), &env))
 }
 
@@ -313,12 +328,28 @@ mod tests {
     }
 
     #[test]
-    fn reads_systemds_own_config_folder() {
-        let env = "HOME=/home/me\nXDG_CONFIG_HOME=/home/me/.cfg\nLANG=C.UTF-8\n";
+    fn reads_the_managers_environment() {
+        let env = "HOME=/home/me\nXDG_CONFIG_HOME=/home/me/.cfg\nXDG_CONFIG_HOME_X=no\n";
+        assert_eq!(env_value(env, "XDG_CONFIG_HOME"), Some("/home/me/.cfg"));
+        assert_eq!(env_value(env, "DISPLAY"), None);
+    }
+
+    #[test]
+    fn records_only_what_systemd_lacks() {
+        let current = [
+            ("DISPLAY", ":0".to_string()),
+            (
+                "XAUTHORITY",
+                "/run/user/1000/.mutter-Xwaylandauth.AB12".to_string(),
+            ),
+            ("PATH", "/home/me/.local/bin:/usr/bin".to_string()),
+        ];
+        let manager =
+            "DISPLAY=:0\nXAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AB12\nPATH=/usr/bin\n";
         assert_eq!(
-            manager_config_home(env).as_deref(),
-            Some(Path::new("/home/me/.cfg"))
+            env_to_record(&current, manager),
+            [("PATH", "/home/me/.local/bin:/usr/bin".to_string())]
         );
-        assert_eq!(manager_config_home("HOME=/home/me\n"), None);
+        assert_eq!(env_to_record(&current, "").len(), 3);
     }
 }

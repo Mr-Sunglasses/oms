@@ -96,7 +96,8 @@ pub fn run() -> Result<()> {
     let mut dark = false;
     log("started");
     loop {
-        if woken.swap(false, Ordering::SeqCst) || last_check.elapsed() >= SAFETY_TICK {
+        let tick = last_check.elapsed() >= SAFETY_TICK;
+        if woken.swap(false, Ordering::SeqCst) || tick {
             last_check = Instant::now();
             settings = Settings::load();
             dark = is_dark();
@@ -111,6 +112,17 @@ pub fn run() -> Result<()> {
                     }
                     last = Some(choice.clone());
                     last_rotation = Instant::now();
+                } else if tick && cfg!(not(target_os = "macos")) {
+                    // Put Ghostty back on this mode's theme if something else
+                    // changed it, e.g. the picker restoring its pre-preview config
+                    // after the mode flipped. Only on the slow tick, so a live
+                    // preview isn't undone the moment settings change.
+                    let themes = repos.load(&settings).unwrap_or_default();
+                    if let Ok(theme) = actions::find(&themes, &choice.theme)
+                        && let Err(e) = sync_ghostty(theme)
+                    {
+                        log(&format!("couldn't update Ghostty: {e:#}"));
+                    }
                 }
             } else {
                 last = None;
@@ -149,16 +161,22 @@ fn follow_appearance(themes: &[Theme], choice: &Choice, settings: &Settings) -> 
     {
         wallpaper::set(path)?;
     }
-    // Linux: Ghostty gets the mode's theme from oms (see `light_dark_value`).
-    #[cfg(target_os = "linux")]
-    {
-        let config = ghostty::config_path();
-        if ghostty::current_theme(&config).as_deref() != Some(theme.ghostty_name.as_str()) {
-            ghostty::set_theme(&config, &theme.ghostty_name)?;
-        }
-    }
+    sync_ghostty(theme)?;
     let apps = actions::apply_apps(theme, settings);
     log(&format!("switched to {}{apps}", theme.name));
+    Ok(())
+}
+
+/// Linux: Ghostty gets the mode's theme from oms (see `light_dark_value`).
+/// macOS Ghostty follows the system itself, so there's nothing to do.
+fn sync_ghostty(theme: &Theme) -> Result<()> {
+    if cfg!(target_os = "macos") {
+        return Ok(());
+    }
+    let config = ghostty::config_path();
+    if ghostty::current_theme(&config).as_deref() != Some(theme.ghostty_name.as_str()) {
+        ghostty::set_theme(&config, &theme.ghostty_name)?;
+    }
     Ok(())
 }
 
