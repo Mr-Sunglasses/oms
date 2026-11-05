@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>oms · Omarchy themes for your Mac</title>
-<meta name="description" content="oms puts Omarchy's 23 themes on macOS: Ghostty, the wallpaper on every Space, and Neovim, btop, bat and tmux, with one key.">
-<meta property="og:title" content="oms · Omarchy themes for your Mac">
+<title>oms · Omarchy themes for your Mac or Linux desktop</title>
+<meta name="description" content="oms puts Omarchy's 23 themes on macOS and Linux: Ghostty, the wallpaper on every screen, and Neovim, btop, bat and tmux, with one key.">
+<meta property="og:title" content="oms · Omarchy themes for your Mac or Linux desktop">
 <meta property="og:description" content="Ghostty theme, wallpaper and app colors, switched together with one key.">
 <meta property="og:image" content="https://raw.githubusercontent.com/Mr-Sunglasses/oms/main/docs/screenshot.png">
 <meta name="color-scheme" content="dark light">
@@ -148,14 +148,14 @@
  / _ \| '_ ` _ \/ __|
 | (_) | | | | | \__ \
  \___/|_| |_| |_|___/</pre>
-    <h1>Omarchy's themes, for your whole Mac.</h1>
-    <p class="lede">One key sets the Ghostty theme, the wallpaper on every Space, and the colors of Neovim, btop, bat and tmux. It can even follow light and dark mode on its own.</p>
+    <h1>Omarchy's themes, for your whole desktop.</h1>
+    <p class="lede">One key sets the Ghostty theme, the wallpaper on every screen, and the colors of Neovim, btop, bat and tmux. It can even follow light and dark mode on its own.</p>
 
     <div class="install" id="install">
       <code><span class="p">$ </span><span id="cmd">curl -fsSL https://kanishkk.xyz/oms | bash</span></code>
       <button class="copy" type="button" data-copy="cmd">copy</button>
     </div>
-    <p class="small">Then run <code>oms</code>. macOS on Apple silicon or Intel.</p>
+    <p class="small">Then run <code>oms</code>. macOS on Apple silicon or Intel, and Linux (XFCE, GNOME, KDE, Hyprland, Sway).</p>
   </div>
 
   <div class="picker">
@@ -194,9 +194,9 @@
     <ul class="features">
       <li><b>23 Omarchy themes</b><p>Every theme from Omarchy, ported to Ghostty with a matching app icon.</p></li>
       <li><b>Live preview</b><p>Ghostty recolors as you move through the list. Quit and your theme comes back.</p></li>
-      <li><b>Wallpaper everywhere</b><p>Each theme's own wallpapers, set on every Space and display at once.</p></li>
-      <li><b>Light &amp; dark</b><p>Pick a day theme and a night theme with <span class="k">L</span> and <span class="k">D</span>. Your Mac switches them for you.</p></li>
-      <li><b>Your apps too</b><p>Neovim, btop, bat, tmux and the macOS accent color follow the theme.</p></li>
+      <li><b>Wallpaper everywhere</b><p>Each theme's own wallpapers, set on every display (and every Space on macOS) at once.</p></li>
+      <li><b>Light &amp; dark</b><p>Pick a day theme and a night theme with <span class="k">L</span> and <span class="k">D</span>. oms switches them when your system does.</p></li>
+      <li><b>Your apps too</b><p>Neovim, btop, bat, tmux and the accent color (macOS, or GNOME 47+) follow the theme.</p></li>
       <li><b>Rotation</b><p><span class="k">oms rotate 30m</span> moves to the next wallpaper on a timer.</p></li>
       <li><b>Favorites &amp; search</b><p><span class="k">f</span> stars a theme, <span class="k">/</span> filters, recent ones stay near the top.</p></li>
       <li><b>Your wallpapers</b><p>Add your own pictures or folders to any theme.</p></li>
@@ -226,6 +226,7 @@
     <h2>Notes</h2>
     <!-- New notes go at the top. Copy an <li> and change the date and text. -->
     <ul class="notes">
+      <li><time datetime="2026-11-06">6 Nov 2026</time><b>oms 0.10</b><p>oms runs on Linux now. Install it with the same command. It sets the wallpaper on XFCE (Kali's default), GNOME, KDE, Hyprland and Sway, follows your desktop's light/dark mode through a systemd user service, and themes Ghostty and your apps like it does on macOS. <code>oms doctor</code> checks the setup.</p></li>
       <li><time datetime="2026-10-27">27 Oct 2026</time><b>oms 0.8</b><p>A much faster first run: oms downloads small previews (about 30 MB, a few seconds) and fetches a theme's full wallpapers when you first use one. The picker uses next to no CPU while idle, new themes appear without reopening it, and Neovim recolors in every open window. Themes Omarchy renames are followed in your favorites and light/dark picks.</p></li>
       <li><time datetime="2026-10-27">27 Oct 2026</time><b>New themes</b><p>Starship and Jade Horse, with their wallpapers. Jade Horse replaces Osaka Jade, as it did in Omarchy. They show up the next time oms checks for updates; no new version needed.</p></li>
       <li><time datetime="2026-10-05">5 Oct 2026</time><b>oms 0.7</b><p>A cleaner picker: a header with what's applied, the palette as a grid, readable wallpaper names, thumbnails that fill their frames, and no flicker when browsing. oms now checks for updates every time it opens and asks right away. Releases build in about 3 minutes instead of 8.</p></li>
