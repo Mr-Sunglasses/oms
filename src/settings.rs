@@ -23,7 +23,7 @@ pub struct Settings {
     pub light: Option<Choice>,
     #[serde(default)]
     pub dark: Option<Choice>,
-    /// Whether to follow the macOS appearance with `light` and `dark`.
+    /// Whether to follow the system light/dark mode with `light` and `dark`.
     #[serde(default)]
     pub auto: bool,
     /// Minutes between wallpaper changes, if rotation is on.

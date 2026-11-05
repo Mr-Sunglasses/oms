@@ -59,7 +59,7 @@ pub fn run(args: &[String]) -> Result<()> {
         }
     }
     let _ = fs::remove_dir_all(data_dir());
-    // The running binary can be removed; macOS keeps it alive until we exit.
+    // The running binary can be removed; the system keeps it alive until we exit.
     fs::remove_file(&exe)?;
     println!("oms is uninstalled. Thanks for trying it!");
     Ok(())

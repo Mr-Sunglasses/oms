@@ -56,15 +56,24 @@ pub fn remove_themes() -> Result<usize> {
 /// The config file that decides the theme: the last one Ghostty loads that sets
 /// `theme`, else the first existing one, else a new `~/.config/ghostty/config`.
 pub fn config_path() -> PathBuf {
-    let app_support = dirs::data_dir()
-        .unwrap_or_default()
-        .join("com.mitchellh.ghostty");
-    // Load order on macOS; later files override earlier ones.
+    // Load order; later files override earlier ones. macOS also reads the
+    // Application Support folder after the XDG one.
+    #[cfg(target_os = "macos")]
+    let candidates = {
+        let app_support = dirs::data_dir()
+            .unwrap_or_default()
+            .join("com.mitchellh.ghostty");
+        [
+            config_home().join("config.ghostty"),
+            config_home().join("config"),
+            app_support.join("config.ghostty"),
+            app_support.join("config"),
+        ]
+    };
+    #[cfg(not(target_os = "macos"))]
     let candidates = [
         config_home().join("config.ghostty"),
         config_home().join("config"),
-        app_support.join("config.ghostty"),
-        app_support.join("config"),
     ];
     candidates
         .iter()
@@ -132,6 +141,20 @@ pub fn write_config(config: &Path, text: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// The `theme =` value for following light and dark mode. Ghostty follows
+/// macOS itself (`light:…,dark:…`). On Linux its own detection misses some
+/// desktops' setting (XFCE's), so oms writes the current mode's theme and the
+/// agent swaps it when the mode changes.
+pub fn light_dark_value(light: &str, dark: &str, is_dark: bool) -> String {
+    if cfg!(target_os = "macos") {
+        format!("light:{light},dark:{dark}")
+    } else if is_dark {
+        dark.to_string()
+    } else {
+        light.to_string()
+    }
+}
+
 pub fn set_theme(config: &Path, theme: &str) -> Result<()> {
     let text = read_config(config).unwrap_or_default();
     write_config(config, Some(&with_theme(&text, theme)))
@@ -177,10 +200,12 @@ pub fn follow_theme_renames(config: &Path) -> Result<()> {
 /// Ghostty reloads its config on SIGUSR2, recoloring every open window.
 pub fn reload() {
     // -a: macOS pkill skips its own ancestors by default, which would leave out
-    // the Ghostty this is running in.
-    let _ = Command::new("pkill")
-        .args(["-USR2", "-a", "-x", "ghostty"])
-        .output();
+    // the Ghostty this is running in. Linux pkill has no -a and doesn't skip them.
+    #[cfg(target_os = "macos")]
+    let args = ["-USR2", "-a", "-x", "ghostty"];
+    #[cfg(not(target_os = "macos"))]
+    let args = ["-USR2", "-x", "ghostty"];
+    let _ = Command::new("pkill").args(args).output();
 }
 
 #[cfg(test)]
@@ -207,6 +232,20 @@ mod tests {
             with_theme(text, "D"),
             "font-size = 14\ntheme = A\n# theme = B\ntheme = D\nx = 1\n"
         );
+    }
+
+    #[test]
+    fn light_dark_value_suits_the_platform() {
+        let value = light_dark_value("Omarchy Nord", "Omarchy Tokyo Night", true);
+        if cfg!(target_os = "macos") {
+            assert_eq!(value, "light:Omarchy Nord,dark:Omarchy Tokyo Night");
+        } else {
+            assert_eq!(value, "Omarchy Tokyo Night");
+            assert_eq!(
+                light_dark_value("Omarchy Nord", "Omarchy Tokyo Night", false),
+                "Omarchy Nord"
+            );
+        }
     }
 
     #[test]

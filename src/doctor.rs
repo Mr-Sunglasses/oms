@@ -96,6 +96,7 @@ fn check_oms(r: &mut Report) {
 fn check_ghostty(r: &mut Report) -> Option<&'static str> {
     let ghostty_bin = [
         "ghostty",
+        #[cfg(target_os = "macos")]
         "/Applications/Ghostty.app/Contents/MacOS/ghostty",
     ]
     .into_iter()
@@ -268,6 +269,7 @@ fn check_saved_themes(r: &mut Report, repos: Option<&Repos>, settings: &Settings
 }
 
 /// Wallpapers can be set on every Space (macOS 14+).
+#[cfg(target_os = "macos")]
 fn check_wallpapers(r: &mut Report) {
     let store = dirs::data_dir()
         .unwrap_or_default()
@@ -283,17 +285,33 @@ fn check_wallpapers(r: &mut Report) {
     }
 }
 
+/// The desktop is one oms can set the wallpaper on, and its tool is installed.
+#[cfg(target_os = "linux")]
+fn check_wallpapers(r: &mut Report) {
+    use crate::wallpaper::linux::{detect, on_path};
+    match detect() {
+        Ok(backend) if on_path(backend.tool()) => r.line(
+            Level::Ok,
+            "Wallpapers",
+            format!("{} (set with {})", backend.name(), backend.tool()),
+        ),
+        Ok(backend) => r.line(
+            Level::Fail,
+            "Wallpapers",
+            format!(
+                "{} needs {}, which isn't installed",
+                backend.name(),
+                backend.tool()
+            ),
+        ),
+        Err(e) => r.line(Level::Fail, "Wallpapers", format!("{e:#}")),
+    }
+}
+
 /// The background agent is running exactly when it's needed.
 fn check_agent(r: &mut Report, settings: &Settings) {
     let wanted = settings.needs_daemon();
-    let loaded = run(
-        "launchctl",
-        &[
-            "print",
-            &format!("{}/{}", daemon::domain(), daemon::label()),
-        ],
-    )
-    .is_some_and(|out| out.contains("state = running"));
+    let loaded = daemon::is_running();
     match (wanted, daemon::is_installed(), loaded) {
         (false, false, _) => r.line(
             Level::Ok,
@@ -313,7 +331,6 @@ fn check_agent(r: &mut Report, settings: &Settings) {
 /// No other oms agent is left behind (e.g. by a run with a different
 /// `OMS_DATA_DIR`); one would keep switching the wallpaper on its own.
 fn check_other_agents(r: &mut Report) {
-    let domain = daemon::domain();
     for agent in daemon::other_agents() {
         let program = match &agent.program {
             Some(p) if p.exists() => p.display().to_string(),
@@ -324,11 +341,10 @@ fn check_other_agents(r: &mut Report) {
             Level::Fail,
             "Other agent",
             format!(
-                "{} runs {program} and can change your wallpaper; remove it with\n{:21}launchctl bootout {domain}/{}; rm '{}'",
+                "{} runs {program} and can change your wallpaper; remove it with\n{:21}{}",
                 agent.label,
                 "",
-                agent.label,
-                agent.plist.display()
+                daemon::remove_hint(&agent),
             ),
         );
     }

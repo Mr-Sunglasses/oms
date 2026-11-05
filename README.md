@@ -2,7 +2,7 @@
 
 # oms
 
-Omarchy themes for your whole Mac: Ghostty, your wallpaper and your apps, switched with one key.
+Omarchy themes for your whole desktop, on macOS and Linux: Ghostty, your wallpaper and your apps, switched with one key.
 
 [![CI](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr-Sunglasses/oms/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Mr-Sunglasses/oms)](https://github.com/Mr-Sunglasses/oms/releases/latest) [![Website](https://img.shields.io/badge/website-oms.kanishkk.xyz-7aa2f7)](https://oms.kanishkk.xyz)
 ![GitHub License](https://img.shields.io/github/license/Mr-Sunglasses/oms)
@@ -20,16 +20,31 @@ Omarchy themes for your whole Mac: Ghostty, your wallpaper and your apps, switch
 curl -fsSL https://kanishkk.xyz/oms | bash
 ```
 
-Then run `oms`. Works on Apple silicon and Intel Macs. When a new version is out, `oms` asks if you want to update. To stop it checking GitHub for new versions and themes, set `OMS_NO_UPDATE_CHECK=1`.
+Then run `oms`. Works on Apple silicon and Intel Macs, and on Linux (x86_64 and ARM64). When a new version is out, `oms` asks if you want to update. To stop it checking GitHub for new versions and themes, set `OMS_NO_UPDATE_CHECK=1`.
 
 Tab completion for your shell: add `source <(oms completions zsh)` to `~/.zshrc` (or `bash`, or `oms completions fish | source` for fish).
+
+### On Linux
+
+oms sets the wallpaper with your desktop's own tool, so nothing extra to install on most setups:
+
+| Desktop | Uses |
+|---|---|
+| XFCE (Kali's default) | `xfconf-query` |
+| GNOME, Ubuntu, Pop, Budgie | `gsettings` |
+| KDE Plasma | `plasma-apply-wallpaperimage` |
+| Hyprland | `swww` if it's running, else `hyprpaper` |
+| Sway | `swww` if it's running, else `swaybg` (via `swaymsg`) |
+| Other X11 window managers | `feh` |
+
+It picks the desktop from `XDG_CURRENT_DESKTOP`; set `OMS_WALLPAPER_BACKEND` (`xfce`, `gnome`, `kde`, `hyprland`, `sway` or `feh`) to choose. Light/dark switching and wallpaper rotation run as a systemd user service. `oms doctor` checks all of this.
 
 ## What it does
 
 - **Every Omarchy theme** for [Ghostty](https://ghostty.org), with a live preview as you browse.
 - **Matching wallpapers**, set on every desktop and screen at once.
-- **Light and dark mode:** pick a day theme and a night theme, and your Mac switches between them.
-- **Your apps too:** Neovim, btop, bat, tmux and the macOS accent color can follow the theme.
+- **Light and dark mode:** pick a day theme and a night theme, and oms switches between them when your system does.
+- **Your apps too:** Neovim, btop, bat, tmux and the accent color (macOS, or GNOME 47+) can follow the theme.
 - **Wallpaper rotation**, favorites, search, and your own wallpapers.
 
 ## Using it
@@ -81,7 +96,7 @@ oms uninstall
 
 ## Contributing
 
-You need [Rust](https://rustup.rs) and a Mac.
+You need [Rust](https://rustup.rs) and a Mac or a Linux machine.
 
 ```sh
 git clone https://github.com/Mr-Sunglasses/oms
@@ -104,7 +119,7 @@ Code style:
 - Every `unsafe` block gets a `// SAFETY:` comment saying why it's sound (also enforced).
 - Comments explain *why*; names explain *what*.
 
-- **Code:** `src/`. The picker's state and input are in `src/app/`, its drawing in `src/ui/`; theme, wallpaper and app changes are in `ghostty.rs`, `wallpaper.rs` and `src/apps/`. Commands for shell completion are listed once in `completions.rs`, and apps once in `apps::APPS`; a test checks `--help` against both.
+- **Code:** `src/`. The picker's state and input are in `src/app/`, its drawing in `src/ui/`; theme, wallpaper and app changes are in `ghostty.rs`, `src/wallpaper/` and `src/apps/`. Platform code lives in its own modules: `src/wallpaper/{macos,linux}` and `src/daemon/{launchd,systemd}.rs`. Commands for shell completion are listed once in `completions.rs`, and apps once in `apps::APPS`; a test checks `--help` against both.
 - **Themes and wallpapers** come from [ghostty-omarchy-themes](https://github.com/Mr-Sunglasses/ghostty-omarchy-themes) and [omarchy-wallpapers](https://github.com/Mr-Sunglasses/omarchy-wallpapers); change them there.
 - **Website:** `site/`. It deploys to [oms.kanishkk.xyz](https://oms.kanishkk.xyz) on every push to `main`. After themes change, run `site/build.py`; it refreshes `themes.json`, the thumbnails and the theme count on the page.
 - **Releases:** bump `version` in `Cargo.toml` and push a tag like `v0.6.0`. GitHub Actions builds and publishes it.

@@ -37,6 +37,15 @@ pub(super) fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         left.push(Span::raw(pretty_name(path)).dark_gray());
     }
     let mut right = Vec::new();
+    // On macOS the ☀/☾ pair on the left already says so; on Linux Ghostty's
+    // config holds just the current mode's theme.
+    let pair_shown = app
+        .applied_theme
+        .as_deref()
+        .is_some_and(|t| t.contains("light:") || t.contains("dark:"));
+    if app.settings.auto && !pair_shown {
+        right.push(Span::raw("◐ follows light/dark  ").dark_gray());
+    }
     if let Some(minutes) = app.settings.rotate_minutes {
         let every = if minutes % 60 == 0 {
             format!("{}h", minutes / 60)

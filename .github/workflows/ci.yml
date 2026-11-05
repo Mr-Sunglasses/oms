@@ -7,7 +7,11 @@ on:
 
 jobs:
   check:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6
@@ -24,12 +28,13 @@ jobs:
       - name: Test
         run: cargo test --locked
       - name: Install script
-        # macOS runners don't ship shellcheck.
+        # macOS runners don't ship shellcheck; Ubuntu runners do.
         run: |
           command -v shellcheck >/dev/null || brew install shellcheck
           bash -n install.sh && shellcheck install.sh
       - name: Website theme count
         # site/build.py keeps index.html's theme count in step with themes.json.
+        if: runner.os == 'Linux'
         run: |
           python3 - <<'PY'
           import json, re

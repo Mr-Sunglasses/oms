@@ -1,6 +1,7 @@
-//! Theming apps beyond Ghostty: Neovim, btop, bat, tmux and the macOS accent
+//! Theming apps beyond Ghostty: Neovim, btop, bat, tmux and the system accent
 //! color. Each is opt-in (`oms apps on <app>`).
 
+mod accent;
 mod nvim;
 
 use std::fs;
@@ -9,7 +10,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use crate::repo::{Rgb, Theme};
+use crate::repo::Theme;
 
 pub const APPS: &[(&str, &str)] = &[
     (
@@ -19,10 +20,7 @@ pub const APPS: &[(&str, &str)] = &[
     ("btop", "btop: color theme \"omarchy\""),
     ("bat", "bat: syntax theme \"omarchy\" (also used by delta)"),
     ("tmux", "tmux: status bar, borders and messages"),
-    (
-        "accent",
-        "macOS accent color, closest to the theme's accent",
-    ),
+    ("accent", accent::DESCRIPTION),
 ];
 
 /// The app ids, for help text and shell completion.
@@ -53,7 +51,7 @@ pub fn available(app: &str) -> bool {
     match app {
         "nvim" => config_home().join("nvim").exists(),
         "btop" | "bat" | "tmux" => on_path(app),
-        "accent" => true,
+        "accent" => accent::available(),
         _ => false,
     }
 }
@@ -68,7 +66,7 @@ pub fn apply(theme: &Theme, enabled: &[String]) -> (Vec<String>, Vec<String>) {
             "btop" => btop(theme),
             "bat" => bat(theme),
             "tmux" => tmux(theme),
-            "accent" => accent(theme.accent),
+            "accent" => accent::apply(theme.accent),
             _ => continue,
         };
         match result {
@@ -211,95 +209,6 @@ fn tmux(theme: &Theme) -> Result<()> {
     Ok(())
 }
 
-/// macOS's accent colors: (`AppleAccentColor` value, hue in degrees).
-const ACCENTS: &[(i32, f32)] = &[
-    (0, 0.0),   // red
-    (1, 30.0),  // orange
-    (2, 55.0),  // yellow
-    (3, 120.0), // green
-    (4, 215.0), // blue
-    (5, 275.0), // purple
-    (6, 330.0), // pink
-    (0, 360.0), // red again, for hues near 360
-];
-
-/// The macOS accent closest to `color`; -1 (graphite) for greys.
-pub fn nearest_accent((r, g, b): Rgb) -> i32 {
-    let (r, g, b) = (
-        f32::from(r) / 255.0,
-        f32::from(g) / 255.0,
-        f32::from(b) / 255.0,
-    );
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let delta = max - min;
-    let lightness = f32::midpoint(max, min);
-    let saturation = if delta == 0.0 {
-        0.0
-    } else {
-        delta / (1.0 - (2.0 * lightness - 1.0).abs())
-    };
-    if saturation < 0.18 || delta < 0.08 {
-        return -1;
-    }
-    // `max` is exactly one of r, g, b, so these comparisons are exact.
-    #[allow(clippy::float_cmp)]
-    let hue = if max == r {
-        60.0 * (((g - b) / delta).rem_euclid(6.0))
-    } else if max == g {
-        60.0 * ((b - r) / delta + 2.0)
-    } else {
-        60.0 * ((r - g) / delta + 4.0)
-    };
-    ACCENTS
-        .iter()
-        .min_by(|a, b| (a.1 - hue).abs().total_cmp(&(b.1 - hue).abs()))
-        .map_or(4, |a| a.0)
-}
-
-fn accent(color: Rgb) -> Result<()> {
-    let value = nearest_accent(color);
-    let status = Command::new("defaults")
-        .args([
-            "write",
-            "-g",
-            "AppleAccentColor",
-            "-int",
-            &value.to_string(),
-        ])
-        .status()?;
-    if !status.success() {
-        bail!("defaults write failed");
-    }
-    // Leave the highlight color on "Automatic" so it follows the accent.
-    let _ = Command::new("defaults")
-        .args(["delete", "-g", "AppleHighlightColor"])
-        .output();
-    notify_accent_changed();
-    Ok(())
-}
-
-/// Tells running apps the accent changed, so most update without a restart.
-fn notify_accent_changed() {
-    use objc2_foundation::{NSDistributedNotificationCenter, NSString};
-    let center = NSDistributedNotificationCenter::defaultCenter();
-    for name in [
-        "AppleColorPreferencesChangedNotification",
-        "AppleAquaColorVariantChanged",
-    ] {
-        // SAFETY: a valid notification name with no object or user info, which
-        // the API allows; posting a distributed notification has no other preconditions.
-        unsafe {
-            center.postNotificationName_object_userInfo_deliverImmediately(
-                &NSString::from_str(name),
-                None,
-                None,
-                true,
-            );
-        }
-    }
-}
-
 /// Undoes what `apply` set up for `app`.
 pub fn remove(app: &str) -> Result<()> {
     match app {
@@ -328,28 +237,8 @@ pub fn remove(app: &str) -> Result<()> {
                 l.trim() == line || l.trim() == "# Colors from oms (Omarchy themes)"
             })?;
         }
-        "accent" => {
-            let _ = Command::new("defaults")
-                .args(["delete", "-g", "AppleAccentColor"])
-                .output();
-            notify_accent_changed();
-        }
+        "accent" => accent::remove(),
         _ => {}
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::nearest_accent;
-
-    #[test]
-    fn maps_colors_to_macos_accents() {
-        assert_eq!(nearest_accent((0x7a, 0xa2, 0xf7)), 4); // Tokyo Night blue
-        assert_eq!(nearest_accent((0xf7, 0x76, 0x8e)), 0); // red
-        assert_eq!(nearest_accent((0x9e, 0xce, 0x6a)), 3); // green
-        assert_eq!(nearest_accent((0xad, 0x8e, 0xe6)), 5); // purple
-        assert_eq!(nearest_accent((0xe0, 0xaf, 0x68)), 1); // amber -> orange
-        assert_eq!(nearest_accent((0x88, 0x88, 0x88)), -1); // grey -> graphite
-    }
 }

@@ -7,7 +7,17 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 
 const REPO: &str = "Mr-Sunglasses/oms";
-const ASSET: &str = "oms-macos-universal.tar.gz";
+
+/// The release archive for an OS and CPU (`std::env::consts` names), if
+/// releases include one.
+fn asset_for(os: &str, arch: &str) -> Option<&'static str> {
+    match (os, arch) {
+        ("macos", _) => Some("oms-macos-universal.tar.gz"),
+        ("linux", "x86_64") => Some("oms-linux-x86_64.tar.gz"),
+        ("linux", "aarch64") => Some("oms-linux-aarch64.tar.gz"),
+        _ => None,
+    }
+}
 
 /// The newer release's version, if there is one.
 pub fn available() -> Option<String> {
@@ -34,6 +44,10 @@ pub fn self_update() -> Result<bool> {
         return Ok(false);
     }
 
+    let (os, arch) = (std::env::consts::OS, std::env::consts::ARCH);
+    let asset = asset_for(os, arch).with_context(|| {
+        format!("there's no prebuilt oms for {os}/{arch}; update with `cargo install --git https://github.com/{REPO}`")
+    })?;
     let exe = std::env::current_exe()?.canonicalize()?;
     let dir = exe
         .parent()
@@ -41,8 +55,8 @@ pub fn self_update() -> Result<bool> {
     let tmp = tempdir()?;
     let result = (|| -> Result<()> {
         println!("Downloading oms {latest}...");
-        let base = format!("https://github.com/{REPO}/releases/download/{tag}/{ASSET}");
-        let archive = tmp.join(ASSET);
+        let base = format!("https://github.com/{REPO}/releases/download/{tag}/{asset}");
+        let archive = tmp.join(asset);
         curl(&base, &archive, true)?;
         curl(&format!("{base}.sha256"), &tmp.join("sha256"), false)?;
         verify(&archive, &tmp.join("sha256"))?;
@@ -133,10 +147,13 @@ fn curl(url: &str, dest: &Path, progress: bool) -> Result<()> {
 fn verify(archive: &Path, sum_file: &Path) -> Result<()> {
     let expected = fs::read_to_string(sum_file)?;
     let expected = expected.split_whitespace().next().unwrap_or_default();
+    // shasum comes with macOS (and Perl); most Linux systems have sha256sum.
     let out = Command::new("shasum")
         .args(["-a", "256"])
         .arg(archive)
-        .output()?;
+        .output()
+        .or_else(|_| Command::new("sha256sum").arg(archive).output())
+        .context("neither shasum nor sha256sum is installed")?;
     let actual = String::from_utf8_lossy(&out.stdout);
     if actual.split_whitespace().next() != Some(expected) {
         bail!("checksum mismatch for the download, not updating");
@@ -155,6 +172,27 @@ fn run(cmd: &mut Command) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn picks_the_archive_for_the_platform() {
+        assert_eq!(
+            asset_for("macos", "aarch64"),
+            Some("oms-macos-universal.tar.gz")
+        );
+        assert_eq!(
+            asset_for("macos", "x86_64"),
+            Some("oms-macos-universal.tar.gz")
+        );
+        assert_eq!(
+            asset_for("linux", "x86_64"),
+            Some("oms-linux-x86_64.tar.gz")
+        );
+        assert_eq!(
+            asset_for("linux", "aarch64"),
+            Some("oms-linux-aarch64.tar.gz")
+        );
+        assert_eq!(asset_for("linux", "riscv64"), None);
+    }
 
     #[test]
     fn compares_versions_numerically() {
