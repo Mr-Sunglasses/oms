@@ -1,6 +1,5 @@
 //! Reading and setting the macOS desktop picture.
 
-use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -75,10 +74,7 @@ fn set_in_store(path: &Path) -> Result<()> {
     let mut config = Dictionary::new();
     config.insert("type".into(), "imageFile".into());
     let mut url = Dictionary::new();
-    url.insert(
-        "relative".into(),
-        format!("file://{}", encode_path(path)).into(),
-    );
+    url.insert("relative".into(), super::file_url(path).into());
     config.insert("url".into(), url.into());
     let mut config_bytes = Vec::new();
     plist::to_writer_binary(&mut config_bytes, &Value::from(config))?;
@@ -184,22 +180,6 @@ fn fill_screen_options() -> Vec<u8> {
     let mut bytes = Vec::new();
     let _ = plist::to_writer_binary(&mut bytes, &value);
     bytes
-}
-
-/// Percent-encodes a path for a file:// URL.
-fn encode_path(path: &Path) -> String {
-    let mut out = String::new();
-    for b in path.to_string_lossy().bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char);
-            }
-            _ => {
-                let _ = write!(out, "%{b:02X}");
-            }
-        }
-    }
-    out
 }
 
 /// The main display's current wallpaper.

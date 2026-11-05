@@ -356,6 +356,9 @@ mod tests {
                 "user.name=oms",
                 "-c",
                 "user.email=oms@example.com",
+                // Don't depend on the developer's signing setup.
+                "-c",
+                "commit.gpgsign=false",
                 "commit",
                 "-qm",
                 "x",

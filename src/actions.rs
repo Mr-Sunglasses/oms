@@ -73,7 +73,7 @@ pub fn apply_wallpaper(theme: &Theme, index: usize, settings: &mut Settings) -> 
 }
 
 /// Sets the theme for light or dark mode. Once both are set, Ghostty follows
-/// the macOS appearance and the agent switches wallpapers and app themes.
+/// the system light/dark mode and the agent switches wallpapers and app themes.
 pub fn set_mode_theme(
     themes: &[Theme],
     dark: bool,
@@ -93,13 +93,14 @@ pub fn set_mode_theme(
         let dark_theme = find(themes, &dark_choice.theme)?;
         ghostty::set_theme(
             &ghostty::config_path(),
-            &format!(
-                "light:{},dark:{}",
-                light_theme.ghostty_name, dark_theme.ghostty_name
+            &ghostty::light_dark_value(
+                &light_theme.ghostty_name,
+                &dark_theme.ghostty_name,
+                daemon::is_dark(),
             ),
         )?;
         format!(
-            "{name} is the {mode} theme. Following macOS: {} by day, {} by night",
+            "{name} is the {mode} theme. Following the system: {} by day, {} by night",
             light_theme.name, dark_theme.name
         )
     } else {

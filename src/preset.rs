@@ -258,10 +258,10 @@ fn finish(check_font: bool) {
     if check_font && !font_installed() {
         println!("The config uses the {FONT} font, which isn't installed. Install it with:");
         println!();
-        println!("  brew install --cask font-fira-code-nerd-font");
+        println!("  {FONT_INSTALL}");
         println!();
     }
-    println!("Ghostty has reloaded it. Quit and reopen Ghostty (cmd+q) for the window");
+    println!("Ghostty has reloaded it. Quit and reopen Ghostty ({QUIT_KEY}) for the window");
     println!("settings (transparency, blur, shader, icon) to take effect.");
     println!("Undo with: oms config restore");
 }
@@ -315,6 +315,17 @@ fn backup_path(path: &Path) -> Result<PathBuf> {
     Ok(path.with_file_name(format!("{name}.oms-{stamp}.bak")))
 }
 
+#[cfg(target_os = "macos")]
+const FONT_INSTALL: &str = "brew install --cask font-fira-code-nerd-font";
+#[cfg(not(target_os = "macos"))]
+const FONT_INSTALL: &str = "mkdir -p ~/.local/share/fonts/FiraCode && curl -fsSL https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.tar.xz | tar -xJ -C ~/.local/share/fonts/FiraCode && fc-cache -f";
+
+#[cfg(target_os = "macos")]
+const QUIT_KEY: &str = "cmd+q";
+#[cfg(not(target_os = "macos"))]
+const QUIT_KEY: &str = "ctrl+shift+q";
+
+#[cfg(target_os = "macos")]
 fn font_installed() -> bool {
     let home = dirs::home_dir().unwrap_or_default();
     [home.join("Library/Fonts"), PathBuf::from("/Library/Fonts")]
@@ -327,6 +338,15 @@ fn font_installed() -> bool {
                 .to_string_lossy()
                 .starts_with("FiraCodeNerdFontMono")
         })
+}
+
+/// Linux: fontconfig knows every font folder (including subfolders).
+#[cfg(not(target_os = "macos"))]
+fn font_installed() -> bool {
+    std::process::Command::new("fc-list")
+        .args([":", "family"])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains(FONT))
 }
 
 #[cfg(test)]

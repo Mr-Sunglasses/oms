@@ -13,12 +13,21 @@ permissions:
   contents: write
 
 jobs:
-  # Each architecture builds on its own runner, at the same time.
+  # Each target builds on its own runner, at the same time. Linux builds run on
+  # a runner of the same architecture, so there's no cross-compiling.
   build:
     strategy:
       matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
-    runs-on: macos-latest
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -87,7 +96,15 @@ jobs:
       - name: Package
         run: |
           tar -czf oms-macos-universal.tar.gz -C dist oms
-          shasum -a 256 oms-macos-universal.tar.gz > oms-macos-universal.tar.gz.sha256
+          for arch in x86_64 aarch64; do
+            mkdir "linux-$arch"
+            cp "builds/oms-$arch-unknown-linux-gnu/oms" "linux-$arch/oms"
+            chmod +x "linux-$arch/oms"
+            tar -czf "oms-linux-$arch.tar.gz" -C "linux-$arch" oms
+          done
+          for archive in oms-*.tar.gz; do
+            shasum -a 256 "$archive" > "$archive.sha256"
+          done
 
       - name: Publish the release
         env:
@@ -95,8 +112,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" oms-macos-universal.tar.gz oms-macos-universal.tar.gz.sha256 --clobber
+            gh release upload "$TAG" oms-*.tar.gz oms-*.tar.gz.sha256 --clobber
           else
-            gh release create "$TAG" oms-macos-universal.tar.gz oms-macos-universal.tar.gz.sha256 \
+            gh release create "$TAG" oms-*.tar.gz oms-*.tar.gz.sha256 \
               --title "oms $TAG" --generate-notes
           fi

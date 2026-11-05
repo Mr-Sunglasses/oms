@@ -1,9 +1,11 @@
-//! oms: pick an Omarchy theme for Ghostty and a matching macOS
-//! wallpaper from one TUI.
+//! oms: pick an Omarchy theme for Ghostty and a matching desktop
+//! wallpaper from one TUI, on macOS and Linux.
 
 // One clear error instead of hundreds of missing AppKit imports.
-#[cfg(not(target_os = "macos"))]
-compile_error!("oms only runs on macOS (it sets the macOS wallpaper and uses a launchd agent)");
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+compile_error!(
+    "oms runs on macOS and Linux (it sets the desktop wallpaper and runs a background agent)"
+);
 
 mod actions;
 mod app;
@@ -43,7 +45,7 @@ use crate::settings::Settings;
 
 /// `{apps}` is filled in from `apps::APPS`, so the list can't drift.
 const USAGE: &str = "\
-oms: Omarchy themes for Ghostty and matching macOS wallpapers
+oms: Omarchy themes for Ghostty and matching desktop wallpapers
 
 Usage:
   oms                               open the picker (press ? inside for keys)
@@ -52,7 +54,7 @@ Usage:
   oms status                        show what's applied and what's switched on
 
 Light and dark:
-  oms auto <light> <dark>           follow macOS light/dark mode with two themes
+  oms auto <light> <dark>           follow the system light/dark mode with two themes
                                     (pick wallpapers with theme:n, e.g. nord:2)
   oms auto off                      stop following light/dark mode
 

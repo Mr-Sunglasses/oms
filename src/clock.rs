@@ -63,7 +63,7 @@ pub fn file_stamp() -> String {
     )
 }
 
-/// The current user's id, for launchd's `gui/<uid>` domain.
+/// The current user's id (launchd's `gui/<uid>` domain; `pgrep -u` on Linux).
 pub fn uid() -> u32 {
     // SAFETY: `getuid` takes no arguments, can't fail and has no side effects.
     unsafe { libc::getuid() }
