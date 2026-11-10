@@ -20,7 +20,12 @@ pub fn status(repos: &Repos, settings: &Settings) -> Result<()> {
     let theme = ghostty::current_theme(&ghostty::config_path()).unwrap_or_else(|| "(none)".into());
     println!("Ghostty theme:    {theme}");
     if let Some(path) = wallpaper::current() {
-        println!("Wallpaper:        {}", path.display());
+        let live = if wallpaper::live::is_video(&path) {
+            " (live)"
+        } else {
+            ""
+        };
+        println!("Wallpaper:        {}{live}", path.display());
     }
     match (&settings.light, &settings.dark, settings.auto) {
         (Some(l), Some(d), true) => {
@@ -285,11 +290,11 @@ pub fn wallpapers(repos: &Repos, settings: &mut Settings, args: &[String]) -> Re
         }
         Some("add") => {
             if paths.is_empty() {
-                bail!("add which pictures or folders?");
+                bail!("add which pictures, videos or folders?");
             }
             let found = repo::expand_wallpapers(&paths).len();
             if found == 0 {
-                bail!("no pictures (jpg, png, heic, …) found there");
+                bail!("no pictures (jpg, png, heic, …) or videos (mp4, mov) found there");
             }
             let list = settings
                 .custom_wallpapers
@@ -301,7 +306,7 @@ pub fn wallpapers(repos: &Repos, settings: &mut Settings, args: &[String]) -> Re
                 }
             }
             settings.save()?;
-            println!("Added {found} pictures to {}.", theme.name);
+            println!("Added {found} wallpapers to {}.", theme.name);
             Ok(())
         }
         Some("remove") => {

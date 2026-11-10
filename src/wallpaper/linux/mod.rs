@@ -1,9 +1,11 @@
-//! Linux: sets the wallpaper with the desktop's own tool. Which desktop is
-//! running comes from `XDG_CURRENT_DESKTOP` (or the session's sockets and
-//! processes); `OMS_WALLPAPER_BACKEND` overrides it.
+//! Linux: sets the wallpaper with the desktop's own tool. Omarchy is found by
+//! its `omarchy-theme-bg-set` command; other desktops come from
+//! `XDG_CURRENT_DESKTOP` (or the session's sockets and processes).
+//! `OMS_WALLPAPER_BACKEND` overrides it.
 
 mod desktops;
-mod wayland;
+mod omarchy;
+pub(crate) mod wayland;
 mod xfce;
 
 use std::path::{Path, PathBuf};
@@ -11,11 +13,15 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-/// Overrides the detected desktop: xfce, gnome, kde, hyprland, sway or feh.
+/// Overrides the detected desktop: omarchy, xfce, gnome, kde, hyprland, sway or feh.
 pub const BACKEND_ENV: &str = "OMS_WALLPAPER_BACKEND";
+
+const BACKEND_NAMES: &str = "omarchy, xfce, gnome, kde, hyprland, sway or feh";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
+    /// Omarchy draws its own background (stills and videos) on Hyprland.
+    Omarchy,
     Xfce,
     Gnome,
     Kde,
@@ -28,6 +34,7 @@ pub enum Backend {
 impl Backend {
     pub fn name(self) -> &'static str {
         match self {
+            Backend::Omarchy => "Omarchy",
             Backend::Xfce => "XFCE",
             Backend::Gnome => "GNOME",
             Backend::Kde => "KDE Plasma",
@@ -40,6 +47,7 @@ impl Backend {
     /// The program the backend runs, to check it's installed.
     pub fn tool(self) -> &'static str {
         match self {
+            Backend::Omarchy => omarchy::SET_COMMAND,
             Backend::Xfce => "xfconf-query",
             Backend::Gnome => "gsettings",
             Backend::Kde => "plasma-apply-wallpaperimage",
@@ -57,6 +65,7 @@ fn parse_desktop(value: &str) -> Option<Backend> {
         .split([':', ';'])
         .map(|part| part.trim().to_lowercase())
         .find_map(|part| match part.as_str() {
+            "omarchy" => Some(Backend::Omarchy),
             "xfce" | "xfce4" => Some(Backend::Xfce),
             "gnome" | "gnome-classic" | "gnome-xorg" | "ubuntu" | "pop" | "budgie"
             | "budgie-desktop" | "unity" => Some(Backend::Gnome),
@@ -82,9 +91,12 @@ fn process_running(name: &str) -> bool {
 /// Which desktop to set the wallpaper on.
 pub fn detect() -> Result<Backend> {
     if let Some(value) = env(BACKEND_ENV) {
-        return parse_desktop(&value).with_context(|| {
-            format!("{BACKEND_ENV}={value} isn't one of xfce, gnome, kde, hyprland, sway or feh")
-        });
+        return parse_desktop(&value)
+            .with_context(|| format!("{BACKEND_ENV}={value} isn't one of {BACKEND_NAMES}"));
+    }
+    // Omarchy runs Hyprland but sets backgrounds its own way.
+    if on_path(omarchy::SET_COMMAND) {
+        return Ok(Backend::Omarchy);
     }
     let named = [
         "XDG_CURRENT_DESKTOP",
@@ -110,15 +122,10 @@ pub fn detect() -> Result<Backend> {
     if env("DISPLAY").is_some() && on_path("feh") {
         return Ok(Backend::Feh);
     }
-    bail!(
-        "couldn't tell which desktop you're using; set {BACKEND_ENV} to xfce, gnome, kde, hyprland, sway or feh"
-    )
+    bail!("couldn't tell which desktop you're using; set {BACKEND_ENV} to {BACKEND_NAMES}")
 }
 
-pub fn on_path(program: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(program).is_file()))
-}
+pub use super::on_path;
 
 /// Runs a desktop tool and returns its output, with an error that says what
 /// to install when it's missing.
@@ -147,6 +154,7 @@ pub fn set(path: &Path) -> Result<()> {
         .canonicalize()
         .with_context(|| format!("{} not found", path.display()))?;
     match detect()? {
+        Backend::Omarchy => omarchy::set(&path),
         Backend::Xfce => xfce::set(&path),
         Backend::Gnome => desktops::set_gnome(&path),
         Backend::Kde => desktops::set_kde(&path),
@@ -169,6 +177,7 @@ pub fn set_current_space(path: &Path) -> Result<()> {
 /// The current wallpaper, if the desktop says.
 pub fn current() -> Option<PathBuf> {
     match detect().ok()? {
+        Backend::Omarchy => omarchy::current(),
         Backend::Xfce => xfce::current(),
         Backend::Gnome => desktops::current_gnome(),
         Backend::Kde => desktops::current_kde(),
@@ -184,6 +193,7 @@ mod tests {
 
     #[test]
     fn reads_desktop_names() {
+        assert_eq!(parse_desktop("omarchy"), Some(Backend::Omarchy));
         assert_eq!(parse_desktop("XFCE"), Some(Backend::Xfce));
         assert_eq!(parse_desktop("ubuntu:GNOME"), Some(Backend::Gnome));
         assert_eq!(parse_desktop("KDE"), Some(Backend::Kde));

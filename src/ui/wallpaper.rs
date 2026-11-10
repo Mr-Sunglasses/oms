@@ -32,6 +32,9 @@ pub(super) fn draw_wallpaper(f: &mut Frame, app: &mut App, area: Rect, with_them
         };
         title.push(Span::raw(format!("{}/{count} · ", index + 1)).dark_gray());
         title.push(Span::raw(format!("{}{yours} ", pretty_name(path))));
+        if crate::wallpaper::live::is_video(path) {
+            title.push(Span::raw("▶ live ").cyan());
+        }
         if app.is_applied_wallpaper(path) {
             title.push(Span::raw("● ").green());
         }

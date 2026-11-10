@@ -177,7 +177,7 @@ fn quote(value: &str) -> String {
 /// The unit text for `exe`, logging to `log`, with `env` passed on.
 fn unit(exe: &Path, log: &Path, env: &[(&str, String)]) -> String {
     let mut text = String::from(
-        "[Unit]\nDescription=oms: Omarchy theme light/dark switching and wallpaper rotation\n\n[Service]\nType=simple\n",
+        "[Unit]\nDescription=oms: Omarchy theme light/dark switching, wallpaper rotation and live wallpapers\n\n[Service]\nType=simple\n",
     );
     let _ = writeln!(
         text,
@@ -248,10 +248,11 @@ fn settings_mtime() -> Option<SystemTime> {
         .ok()
 }
 
-/// Wakes the agent when the settings file changes or, while light/dark
-/// switching is on, when the system's mode flips.
+/// Wakes the agent when the settings file or the live wallpaper changes or,
+/// while light/dark switching is on, when the system's mode flips.
 pub struct Watcher {
     settings: Option<SystemTime>,
+    live: Option<SystemTime>,
     dark: bool,
     last_poll: Instant,
 }
@@ -260,6 +261,7 @@ impl Watcher {
     pub fn new(_flag: &Arc<AtomicBool>) -> Self {
         Self {
             settings: settings_mtime(),
+            live: crate::wallpaper::live::state_mtime(),
             dark: is_dark(),
             last_poll: Instant::now(),
         }
@@ -276,8 +278,10 @@ impl Watcher {
             }
             std::thread::sleep((until - now).min(Duration::from_secs(1)));
             let mtime = settings_mtime();
-            if mtime != self.settings {
+            let live = crate::wallpaper::live::state_mtime();
+            if mtime != self.settings || live != self.live {
                 self.settings = mtime;
+                self.live = live;
                 flag.store(true, Ordering::SeqCst);
             }
             if auto && self.last_poll.elapsed() >= APPEARANCE_POLL {

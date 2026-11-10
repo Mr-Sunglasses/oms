@@ -196,7 +196,9 @@ impl Settings {
 
     /// Whether the background agent has anything to do.
     pub fn needs_daemon(&self) -> bool {
-        (self.auto && self.light.is_some() && self.dark.is_some()) || self.rotate_minutes.is_some()
+        (self.auto && self.light.is_some() && self.dark.is_some())
+            || self.rotate_minutes.is_some()
+            || crate::wallpaper::live::playing().is_some()
     }
 }
 

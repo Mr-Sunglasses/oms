@@ -101,8 +101,10 @@ pub fn current_theme(config: &Path) -> Option<String> {
     theme_line(&text).map(|(_, v)| v.to_string())
 }
 
-/// Returns the config text with its theme set to `theme`.
+/// Returns the config text with its theme set to `theme` (and Omarchy's
+/// theme colors turned off, as they'd hide it; see `without_theme_includes`).
 pub fn with_theme(text: &str, theme: &str) -> String {
+    let text = &without_theme_includes(text);
     let line = format!("theme = {theme}");
     match theme_line(text) {
         Some((index, _)) => {
@@ -117,6 +119,57 @@ pub fn with_theme(text: &str, theme: &str) -> String {
         None if text.is_empty() || text.ends_with('\n') => format!("{text}{line}\n"),
         None => format!("{text}\n{line}\n"),
     }
+}
+
+/// What marks Omarchy's include of its current theme's colors
+/// (`config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`;
+/// `~/.config/omarchy/current/theme` before Omarchy 4).
+const OMARCHY_THEME_INCLUDE: &str = "omarchy/current/theme/";
+
+const INCLUDE_NOTE: &str = "# oms: Omarchy's theme colors (the include below) would hide the theme oms\n\
+     # sets, as colors in a config win over `theme =`. To let Omarchy color Ghostty\n\
+     # again, uncomment it and remove the `theme =` line.";
+
+/// Comments out Omarchy's include of its theme's colors. Ghostty applies an
+/// included `background`, `foreground` and `palette` over the `theme`, so
+/// with it active a theme picked in oms never shows.
+pub fn without_theme_includes(text: &str) -> String {
+    if !text.lines().any(is_theme_include) {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len() + INCLUDE_NOTE.len());
+    for line in text.lines() {
+        if is_theme_include(line) {
+            out.push_str(INCLUDE_NOTE);
+            out.push_str("\n# ");
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    if !text.ends_with('\n') {
+        out.pop();
+    }
+    out
+}
+
+/// An active `config-file = …` line that includes Omarchy's theme colors.
+fn is_theme_include(line: &str) -> bool {
+    !line.trim_start().starts_with('#')
+        && line
+            .split_once('=')
+            .is_some_and(|(k, v)| k.trim() == "config-file" && v.contains(OMARCHY_THEME_INCLUDE))
+}
+
+/// A commented-out Omarchy theme include (`# config-file = …`), made active
+/// again, so it can be carried over and commented out with its note.
+pub fn uncommented_theme_include(line: &str) -> Option<&str> {
+    let line = line.trim_start().strip_prefix('#')?.trim_start();
+    is_theme_include(line).then_some(line)
+}
+
+/// Whether the config still lets Omarchy's theme colors override the theme.
+pub fn has_theme_include(text: &str) -> bool {
+    text.lines().any(is_theme_include)
 }
 
 pub fn read_config(config: &Path) -> Option<String> {
@@ -246,6 +299,23 @@ mod tests {
                 "Omarchy Nord"
             );
         }
+    }
+
+    #[test]
+    fn turns_off_omarchys_theme_colors() {
+        let omarchy = "# Dynamic theme colors\nconfig-file = ?\"~/.local/state/omarchy/current/theme/ghostty.conf\"\n\nfont-size = 9\nconfig-file = extra.conf\n";
+        assert!(has_theme_include(omarchy));
+        let text = with_theme(omarchy, "Omarchy Nord");
+        assert!(!has_theme_include(&text));
+        assert!(text.contains(
+            "\n# config-file = ?\"~/.local/state/omarchy/current/theme/ghostty.conf\"\n"
+        ));
+        // Other includes and settings stay; the theme is added.
+        assert!(text.contains("\nconfig-file = extra.conf\n"));
+        assert!(text.ends_with("theme = Omarchy Nord\n"));
+        // Doing it again changes nothing more.
+        assert_eq!(with_theme(&text, "Omarchy Nord"), text);
+        assert_eq!(without_theme_includes("a = 1"), "a = 1");
     }
 
     #[test]

@@ -27,7 +27,7 @@ fn newest(dir: &Path, matches: impl Fn(&str) -> bool) -> Option<PathBuf> {
 
 /// A command that reaches the running compositor even when the agent was
 /// started with a previous session's (or no) socket variables.
-fn session_command(program: &str) -> Command {
+pub(crate) fn session_command(program: &str) -> Command {
     let mut cmd = Command::new(program);
     let Some(runtime) = runtime_dir() else {
         return cmd;
@@ -49,7 +49,22 @@ fn session_command(program: &str) -> Command {
     {
         cmd.env("SWAYSOCK", sock);
     }
+    // mpvpaper and Omarchy's tools talk to the compositor directly.
+    let wayland_ok = std::env::var_os("WAYLAND_DISPLAY")
+        .is_some_and(|d| runtime.join(&d).exists() || Path::new(&d).exists());
+    if !wayland_ok
+        && let Some(sock) = newest(&runtime, |n| {
+            n.starts_with("wayland-") && Path::new(n).extension().is_none()
+        })
+    {
+        cmd.env("WAYLAND_DISPLAY", sock.file_name().unwrap_or_default());
+    }
     cmd
+}
+
+/// Whether Hyprland has something to show a picture with: hyprpaper or swww.
+pub fn hyprland_has_wallpaper_tool() -> bool {
+    swww_running() || super::process_running("hyprpaper")
 }
 
 fn swww_running() -> bool {

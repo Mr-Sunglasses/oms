@@ -191,14 +191,14 @@ fn theme_wallpapers(wallpapers: &Path, slug: &str) -> Vec<PathBuf> {
         .into_iter()
         .flatten()
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| is_image(p))
+        .filter(|p| is_wallpaper(p))
         .collect();
     let previews = fs::read_dir(wallpapers.join(PREVIEWS_DIR).join(slug));
     for entry in previews.into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         if let Some(original) = name.strip_suffix(".jpg") {
             let path = dir.join(original);
-            if is_image(&path) {
+            if is_wallpaper(&path) {
                 found.insert(path);
             }
         }
@@ -206,7 +206,7 @@ fn theme_wallpapers(wallpapers: &Path, slug: &str) -> Vec<PathBuf> {
     found.into_iter().collect()
 }
 
-/// Image files in `paths`, which can be files or folders.
+/// Wallpapers (pictures and videos) in `paths`, which can be files or folders.
 pub fn expand_wallpapers(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for path in paths {
@@ -215,18 +215,19 @@ pub fn expand_wallpapers(paths: &[PathBuf]) -> Vec<PathBuf> {
                 .into_iter()
                 .flatten()
                 .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| is_image(p))
+                .filter(|p| is_wallpaper(p))
                 .collect();
             files.sort();
             out.extend(files);
-        } else if is_image(path) {
+        } else if is_wallpaper(path) {
             out.push(path.clone());
         }
     }
     out
 }
 
-pub fn is_image(path: &Path) -> bool {
+/// A picture, or a video (a live wallpaper).
+pub fn is_wallpaper(path: &Path) -> bool {
     let ext = path
         .extension()
         .unwrap_or_default()
@@ -235,7 +236,7 @@ pub fn is_image(path: &Path) -> bool {
     matches!(
         ext.as_str(),
         "jpg" | "jpeg" | "png" | "heic" | "webp" | "tiff" | "gif"
-    )
+    ) || crate::wallpaper::live::is_video(path)
 }
 
 fn parse_theme(path: &Path, file_name: &str, wallpapers: &Path) -> Result<Theme> {
