@@ -195,10 +195,12 @@ pub fn restart_if_running() {
 pub fn uninstall() -> Result<()> {
     let path = plist_path();
     if path.exists() {
+        // The file goes first: when the agent removes itself (a live wallpaper
+        // ended), bootout ends this very process.
+        fs::remove_file(&path)?;
         let _ = Command::new("launchctl")
             .args(["bootout", &format!("{}/{}", domain(), label())])
             .output();
-        fs::remove_file(&path)?;
     }
     Ok(())
 }

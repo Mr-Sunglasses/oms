@@ -231,9 +231,12 @@ pub fn restart_if_running() {
 pub fn uninstall() -> Result<()> {
     let path = unit_path();
     if path.exists() {
-        let _ = systemctl(&["disable", "--now", &unit_name()]);
+        // Stopping comes last: when the agent removes itself (a live
+        // wallpaper ended), stopping the unit ends this very process.
+        let _ = systemctl(&["disable", &unit_name()]);
         fs::remove_file(&path)?;
         let _ = systemctl(&["daemon-reload"]);
+        let _ = systemctl(&["stop", &unit_name()]);
     }
     Ok(())
 }
