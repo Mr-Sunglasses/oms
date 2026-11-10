@@ -1,17 +1,26 @@
 //! The background agent (`oms daemon`, run by launchd on macOS and by a
 //! systemd user service on Linux). It switches the wallpaper and app themes
-//! when the system changes between light and dark, and rotates wallpapers.
-//! Ghostty switches its own theme (`theme = light:…,dark:…`).
+//! when the system changes between light and dark, rotates wallpapers, and
+//! plays live (video) wallpapers. Ghostty switches its own theme on macOS
+//! (`theme = light:…,dark:…`).
 
 #[cfg(target_os = "macos")]
 mod launchd;
 #[cfg(target_os = "linux")]
 mod linux_appearance;
 #[cfg(target_os = "linux")]
+mod live_linux;
+#[cfg(target_os = "macos")]
+mod live_macos;
+#[cfg(target_os = "linux")]
 mod systemd;
 
 #[cfg(target_os = "macos")]
 use launchd as platform;
+#[cfg(target_os = "linux")]
+use live_linux::Live;
+#[cfg(target_os = "macos")]
+use live_macos::Live;
 #[cfg(target_os = "linux")]
 use systemd as platform;
 
@@ -20,7 +29,7 @@ pub use platform::{
     remove_other, restart_if_running, uninstall,
 };
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -50,6 +59,12 @@ pub fn label() -> String {
 
 /// A check now and then even without notifications, in case one was missed.
 const SAFETY_TICK: Duration = Duration::from_secs(300);
+/// How often to check on a live wallpaper (that its player still runs, and
+/// that the wallpaper wasn't changed some other way).
+const LIVE_CHECK: Duration = Duration::from_secs(5);
+/// How long after a live wallpaper starts before a different desktop picture
+/// counts as changed elsewhere (macOS takes a moment to report the new one).
+const LIVE_GRACE: Duration = Duration::from_secs(30);
 
 /// An oms agent other than this setup's, e.g. one left behind by a run with a
 /// different `OMS_DATA_DIR`. It still switches the real wallpaper.
@@ -88,6 +103,8 @@ pub fn run() -> Result<()> {
     let repos = Repos::locate(None, None)?;
     let woken = Arc::new(AtomicBool::new(true));
     let mut watcher = platform::Watcher::new(&woken);
+    let mut live = Live::new(&woken);
+    let mut replaced = Replaced::default();
     // What the agent last switched to, so a new light/dark pick applies at once.
     let mut last: Option<Choice> = None;
     let mut last_rotation = Instant::now();
@@ -142,11 +159,69 @@ pub fn run() -> Result<()> {
             }
             timeout = timeout.min(every.saturating_sub(last_rotation.elapsed()));
         }
-        watcher.wait(
-            timeout.max(Duration::from_millis(100)),
-            &woken,
-            settings.auto,
-        );
+        let mut video = wallpaper::live::playing();
+        if let Some(playing) = &video
+            && replaced.check(playing)
+        {
+            log("the wallpaper was changed some other way; stopping the live wallpaper");
+            if let Err(e) = wallpaper::live::set_playing(None) {
+                log(&format!("couldn't stop the live wallpaper: {e:#}"));
+            }
+            video = None;
+        }
+        live.sync(video.as_deref());
+        if live.active() {
+            timeout = timeout.min(LIVE_CHECK);
+        }
+        let timeout = timeout.max(Duration::from_millis(100));
+        #[cfg(target_os = "macos")]
+        if live.active() {
+            live.wait(timeout, &woken);
+            continue;
+        }
+        watcher.wait(timeout, &woken, settings.auto);
+    }
+}
+
+/// Notices the desktop picture under a live wallpaper being changed some
+/// other way (System Settings, the desktop's own tool), so the video stops
+/// covering it.
+#[derive(Default)]
+struct Replaced {
+    video: Option<PathBuf>,
+    since: Option<Instant>,
+    /// Checks in a row that saw a different picture.
+    misses: u8,
+}
+
+impl Replaced {
+    fn check(&mut self, video: &Path) -> bool {
+        if self.video.as_deref() != Some(video) {
+            self.video = Some(video.to_path_buf());
+            self.since = Some(Instant::now());
+            self.misses = 0;
+        }
+        if self.since.is_some_and(|s| s.elapsed() < LIVE_GRACE) {
+            return false;
+        }
+        let Some(still) = wallpaper::current_still() else {
+            // Some desktops can't say (Hyprland without hyprpaper).
+            return false;
+        };
+        let poster = wallpaper::live::expected_still(video);
+        if !poster.exists() {
+            // No still was set under it (ffmpeg missing), so the old picture
+            // showing there says nothing.
+            return false;
+        }
+        let same = |a: &Path, b: &Path| a == b || a.canonicalize().ok() == b.canonicalize().ok();
+        // Omarchy shows the video itself; its picture is the video.
+        if same(&still, &poster) || same(&still, video) {
+            self.misses = 0;
+            return false;
+        }
+        self.misses += 1;
+        self.misses >= 2
     }
 }
 

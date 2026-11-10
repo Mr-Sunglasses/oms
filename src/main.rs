@@ -60,7 +60,8 @@ Light and dark:
 
 Wallpapers:
   oms rotate <30m|2h|off>           change to the theme's next wallpaper on a timer
-  oms wallpapers add <theme> <path>...      add your own pictures or folders
+  oms wallpapers add <theme> <path>...      add your own pictures, videos or folders
+                                            (videos play as live wallpapers)
   oms wallpapers remove <theme> <path>...   remove them again
   oms wallpapers list <theme>               list a theme's wallpapers
 

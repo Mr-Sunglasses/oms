@@ -49,7 +49,8 @@ def main():
             "selection": values.get("selection-background", palette["8"]),
             "accent": values.get("split-divider-color", palette["4"]),
             "palette": [palette[str(i)] for i in range(16)],
-            "wallpapers": len(list((wallpapers_repo / slug).iterdir())),
+            # Files only: a theme's intros/ folder holds animations, not wallpapers.
+            "wallpapers": sum(p.is_file() for p in (wallpapers_repo / slug).iterdir()),
         })
         print(f"{slug:18} {thumb.stat().st_size // 1024} KB")
     (SITE / "themes.json").write_text(json.dumps(out, indent=1) + "\n")

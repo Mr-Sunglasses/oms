@@ -58,6 +58,7 @@ pub fn run_checks(repos: Option<&Repos>) {
     check_downloads(&mut r, repos);
     check_saved_themes(&mut r, repos, &settings);
     check_wallpapers(&mut r);
+    check_live(&mut r);
     check_agent(&mut r, &settings);
     check_other_agents(&mut r);
     check_apps(&mut r, &settings);
@@ -151,6 +152,14 @@ fn check_config(r: &mut Report, ghostty_bin: Option<&str>, config: &Path) {
             Level::Warn,
             "Config",
             format!("{shown} doesn't exist yet; oms creates it when you apply a theme"),
+        );
+    }
+    if ghostty::read_config(config).is_some_and(|t| ghostty::has_theme_include(&t)) {
+        r.line(
+            Level::Warn,
+            "Omarchy colors",
+            "your config includes Omarchy's theme colors, which hide the theme oms sets; \
+             apply a theme in oms and it turns that include off",
         );
     }
     match ghostty::current_theme(config) {
@@ -288,8 +297,15 @@ fn check_wallpapers(r: &mut Report) {
 /// The desktop is one oms can set the wallpaper on, and its tool is installed.
 #[cfg(target_os = "linux")]
 fn check_wallpapers(r: &mut Report) {
-    use crate::wallpaper::linux::{detect, on_path};
+    use crate::wallpaper::linux::wayland::hyprland_has_wallpaper_tool;
+    use crate::wallpaper::linux::{Backend, detect, on_path};
     match detect() {
+        Ok(Backend::Hyprland) if on_path("hyprctl") && !hyprland_has_wallpaper_tool() => r.line(
+            Level::Fail,
+            "Wallpapers",
+            "Hyprland has nothing to draw pictures with; start hyprpaper or swww \
+             (or play videos only, with mpvpaper)",
+        ),
         Ok(backend) if on_path(backend.tool()) => r.line(
             Level::Ok,
             "Wallpapers",
@@ -305,6 +321,42 @@ fn check_wallpapers(r: &mut Report) {
             ),
         ),
         Err(e) => r.line(Level::Fail, "Wallpapers", format!("{e:#}")),
+    }
+}
+
+/// Whether videos play as live wallpapers here, and stills can be made of them.
+fn check_live(r: &mut Report) {
+    use crate::wallpaper::live::{Player, player};
+    let has_ffmpeg = crate::wallpaper::on_path("ffmpeg");
+    match player() {
+        Player::Agent if cfg!(target_os = "macos") => r.line(
+            Level::Ok,
+            "Live wallpapers",
+            "videos (mp4, mov) play behind the desktop icons",
+        ),
+        Player::Agent => r.line(Level::Ok, "Live wallpapers", "videos play with mpvpaper"),
+        Player::Desktop => r.line(
+            Level::Ok,
+            "Live wallpapers",
+            "videos play with Omarchy's own player",
+        ),
+        Player::Missing(program) => r.line(
+            Level::Warn,
+            "Live wallpapers",
+            format!("install {program} to play videos; until then they show their first frame"),
+        ),
+        Player::Unsupported(desktop) => r.line(
+            Level::Warn,
+            "Live wallpapers",
+            format!("{desktop} can't play videos as wallpapers; they show their first frame"),
+        ),
+    }
+    if !has_ffmpeg && cfg!(not(target_os = "macos")) {
+        r.line(
+            Level::Warn,
+            "Video stills",
+            "install ffmpeg so videos get a still frame (for previews and the lock screen)",
+        );
     }
 }
 

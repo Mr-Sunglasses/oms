@@ -30,6 +30,7 @@ oms sets the wallpaper with your desktop's own tool, so nothing extra to install
 
 | Desktop | Uses |
 |---|---|
+| Omarchy | `omarchy-theme-bg-set` (Omarchy's own background, videos included) |
 | XFCE (Kali's default) | `xfconf-query` |
 | GNOME, Ubuntu, Pop, Budgie | `gsettings` |
 | KDE Plasma | `plasma-apply-wallpaperimage` |
@@ -37,7 +38,9 @@ oms sets the wallpaper with your desktop's own tool, so nothing extra to install
 | Sway | `swww` if it's running, else `swaybg` (via `swaymsg`) |
 | Other X11 window managers | `feh` |
 
-It picks the desktop from `XDG_CURRENT_DESKTOP`; set `OMS_WALLPAPER_BACKEND` (`xfce`, `gnome`, `kde`, `hyprland`, `sway` or `feh`) to choose. Light/dark switching and wallpaper rotation run as a systemd user service. `oms doctor` checks all of this.
+It finds Omarchy by its `omarchy-theme-bg-set` command and other desktops from `XDG_CURRENT_DESKTOP`; set `OMS_WALLPAPER_BACKEND` (`omarchy`, `xfce`, `gnome`, `kde`, `hyprland`, `sway` or `feh`) to choose. Light/dark switching, wallpaper rotation and live wallpapers run as a systemd user service. `oms doctor` checks all of this.
+
+On Omarchy, Ghostty's config includes Omarchy's theme colors, which would hide the theme you pick in oms. oms comments that include out (with a note saying how to undo it) the first time it sets a theme.
 
 ## What it does
 
@@ -45,6 +48,7 @@ It picks the desktop from `XDG_CURRENT_DESKTOP`; set `OMS_WALLPAPER_BACKEND` (`x
 - **Matching wallpapers**, set on every desktop and screen at once.
 - **Light and dark mode:** pick a day theme and a night theme, and oms switches between them when your system does.
 - **Your apps too:** Neovim, btop, bat, tmux and the accent color (macOS, or GNOME 47+) can follow the theme.
+- **Live wallpapers:** add a video and it plays behind your desktop icons, or pick one of Omarchy's intro animations.
 - **Wallpaper rotation**, favorites, search, and your own wallpapers.
 
 ## Using it
@@ -78,9 +82,30 @@ oms doctor                            # check your setup if something's off
 oms --help                            # everything else
 ```
 
+## Live wallpapers
+
+Add a video like any other wallpaper, then pick it (it shows `▶ live` in the picker):
+
+```sh
+oms wallpapers add tokyo-night ~/Videos/rain.mp4
+```
+
+It plays muted and on a loop, and its first frame becomes the ordinary wallpaper underneath (for the lock screen, and wherever the video can't play).
+
+Many Omarchy wallpapers also come with Omarchy's **intro**: a short animation that plays into the picture. They're listed after a theme's other wallpapers as `▶ intro`; pick one and it plays once, then rests on its picture. (On Omarchy itself, Omarchy plays them, if its intros are on.)
+
+| Where | How it plays |
+|---|---|
+| macOS | Built in: the oms agent shows it behind the desktop icons on every screen and Space, and pauses it while it's covered. mp4, m4v and mov. |
+| Omarchy | Omarchy plays it itself. |
+| Hyprland, Sway | With [mpvpaper](https://github.com/GhostNaN/mpvpaper), if it's installed. Also webm and mkv. |
+| GNOME, KDE, XFCE, X11 | These can't show a video as the wallpaper, so you get its first frame. |
+
+On Linux, oms takes the first frame with `ffmpeg`. Set a picture again, or change the wallpaper in your system settings, and the video stops.
+
 ## My Ghostty config
 
-oms also ships the Ghostty config I use: FiraCode font, a little transparency, a smooth cursor trail and handy keybindings.
+oms also ships the Ghostty config I use: FiraCode font, a little transparency, a smooth cursor trail and handy keybindings. On Linux you get a Linux version: keybindings on `ctrl+shift` (the super key belongs to your desktop), and no macOS-only settings. Installing it keeps your config's includes and `async-backend` (Omarchy's fix for Hyprland).
 
 ```sh
 oms config install               # use all of it (your current config is backed up)

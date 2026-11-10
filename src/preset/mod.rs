@@ -9,15 +9,25 @@ use anyhow::{Context, Result, bail};
 
 use crate::ghostty;
 
-const CONFIG: &str = include_str!("../preset/config");
+// Both are kept on every platform so the tests check both.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+const MACOS_CONFIG: &str = include_str!("../../preset/config");
+/// Linux uses ctrl+shift keys (super belongs to the desktop) and leaves out
+/// what only macOS has.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+const LINUX_CONFIG: &str = include_str!("../../preset/config.linux");
+#[cfg(target_os = "macos")]
+const CONFIG: &str = MACOS_CONFIG;
+#[cfg(not(target_os = "macos"))]
+const CONFIG: &str = LINUX_CONFIG;
 const SHADERS: &[(&str, &str)] = &[
     (
         "cursor_warp.glsl",
-        include_str!("../preset/shaders/cursor_warp.glsl"),
+        include_str!("../../preset/shaders/cursor_warp.glsl"),
     ),
     (
         "LICENSE.cursor-shaders",
-        include_str!("../preset/shaders/LICENSE.cursor-shaders"),
+        include_str!("../../preset/shaders/LICENSE.cursor-shaders"),
     ),
 ];
 const FONT: &str = "FiraCode Nerd Font Mono";
@@ -52,9 +62,18 @@ pub struct Section {
     pub text: String,
 }
 
+/// Settings of the user's config that `install` keeps: includes (Omarchy's
+/// theme colors, your own files) and the I/O backend (Omarchy's fix for
+/// Ghostty being slow on Hyprland).
+const KEPT: &[&str] = &["config-file", "async-backend"];
+
 /// Splits the preset at its section headers (a title between two dividers).
 pub fn sections() -> Vec<Section> {
-    let lines: Vec<&str> = CONFIG.lines().collect();
+    sections_of(CONFIG)
+}
+
+fn sections_of(config: &str) -> Vec<Section> {
+    let lines: Vec<&str> = config.lines().collect();
     let starts: Vec<usize> = (0..lines.len().saturating_sub(2))
         .filter(|&i| {
             lines[i] == DIVIDER && lines[i + 2] == DIVIDER && lines[i + 1].starts_with("#  ")
@@ -134,12 +153,12 @@ pub fn run(args: &[String]) -> Result<()> {
     }
 }
 
-/// Backs up the current config, writes the preset with the user's own theme,
-/// adds the shader it uses, and reloads Ghostty.
+/// Backs up the current config, writes the preset with the user's own theme
+/// (and includes, see `KEPT`), adds the shader it uses, and reloads Ghostty.
 fn install() -> Result<()> {
     let path = ghostty::config_path();
-    let mut text = CONFIG.to_string();
     let current = ghostty::read_config(&path);
+    let mut text = with_kept(CONFIG, current.as_deref().unwrap_or_default());
     if current.is_some() {
         // Keep the theme they already use.
         if let Some(theme) = ghostty::current_theme(&path) {
@@ -225,6 +244,31 @@ fn merge_section(text: &str, section: &Section) -> String {
     out
 }
 
+/// The preset with the user's `KEPT` lines added at the end. Omarchy's theme
+/// colors include goes in commented out, so the theme shows.
+fn with_kept(preset: &str, old: &str) -> String {
+    let kept: Vec<&str> = old
+        .lines()
+        .filter_map(|l| {
+            let active = setting(l).is_some_and(|(key, _)| KEPT.contains(&key.as_str()));
+            if active {
+                Some(l)
+            } else {
+                // Already turned off by oms: keep it (off) so it's easy to find.
+                ghostty::uncommented_theme_include(l)
+            }
+        })
+        .collect();
+    if kept.is_empty() {
+        return preset.to_string();
+    }
+    let block = ghostty::without_theme_includes(&kept.join("\n"));
+    format!(
+        "{}\n\n\n# Kept from your previous config:\n{block}\n",
+        preset.trim_end()
+    )
+}
+
 /// `key = value` of an active setting line.
 fn setting(line: &str) -> Option<(String, String)> {
     let trimmed = line.trim_start();
@@ -262,7 +306,7 @@ fn finish(check_font: bool) {
         println!();
     }
     println!("Ghostty has reloaded it. Quit and reopen Ghostty ({QUIT_KEY}) for the window");
-    println!("settings (transparency, blur, shader, icon) to take effect.");
+    println!("settings (transparency, blur, shader) to take effect.");
     println!("Undo with: oms config restore");
 }
 
@@ -350,42 +394,4 @@ fn font_installed() -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn splits_the_preset_into_named_sections() {
-        let ids: Vec<String> = sections().into_iter().map(|s| s.id).collect();
-        for id in ["theme", "font", "window", "shader", "keybindings"] {
-            assert!(ids.contains(&id.to_string()), "missing {id}: {ids:?}");
-        }
-    }
-
-    #[test]
-    fn merging_replaces_settings_and_keeps_others() {
-        let font = sections().into_iter().find(|s| s.id == "font").unwrap();
-        let user = "font-size = 14\ntheme = Nord\nfont-feature = calt\n";
-        let merged = merge_section(user, &font);
-        assert!(merged.contains("# (replaced by oms preset: font) font-size = 14"));
-        assert!(merged.contains("theme = Nord"));
-        assert!(merged.contains("font-feature = calt")); // repeatable: kept
-        assert!(merged.contains("# >>> oms preset: font"));
-        // Merging again replaces the block instead of adding a second one.
-        let again = merge_section(&merged, &font);
-        assert_eq!(again.matches("# >>> oms preset: font").count(), 1);
-    }
-
-    #[test]
-    fn keybinds_replace_only_the_same_keys() {
-        let keys = sections()
-            .into_iter()
-            .find(|s| s.id == "keybindings")
-            .unwrap();
-        let user = "keybind = cmd+shift+r=reload_config\nkeybind = ctrl+a=select_all\n";
-        let merged = merge_section(user, &keys);
-        assert!(merged.contains(
-            "# (replaced by oms preset: keybindings) keybind = cmd+shift+r=reload_config"
-        ));
-        assert!(merged.contains("\nkeybind = ctrl+a=select_all"));
-    }
-}
+mod tests;
