@@ -140,9 +140,13 @@ fn cache_dir() -> PathBuf {
     data_dir().join("previews")
 }
 
-/// The picture to make a preview from: the wallpaper, a video's first frame,
-/// or the repo's preview of it while the full picture isn't downloaded.
+/// The picture to make a preview from: the wallpaper, an intro's still, a
+/// video's first frame, or the repo's preview of it while the full picture
+/// isn't downloaded.
 fn source(path: &Path) -> Option<PathBuf> {
+    if let Some(still) = wallpaper::live::intro_still(path) {
+        return source(&still);
+    }
     if !path.exists() {
         repo::preview_of(path)
     } else if wallpaper::live::is_video(path) {
@@ -189,7 +193,9 @@ fn decode(path: &Path) -> Result<DynamicImage, String> {
 /// The small cached copy if there is one; otherwise decodes the original,
 /// shrinks it and caches that.
 fn load(path: &Path) -> Result<Preview, String> {
-    let path = if path.exists() && wallpaper::live::is_video(path) {
+    let first_frame =
+        wallpaper::live::is_video(path) && wallpaper::live::intro_still(path).is_none();
+    let path = if path.exists() && first_frame {
         // Say why there's no still (e.g. ffmpeg missing), not just "not found".
         wallpaper::live::poster(path).map_err(|e| format!("{e:#}"))?
     } else {

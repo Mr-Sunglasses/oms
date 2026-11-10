@@ -1,5 +1,6 @@
 //! Linux: plays the live wallpaper with mpvpaper (Hyprland, Sway), restarting
 //! it if it exits. mpvpaper pauses by itself while the wallpaper is covered.
+//! An intro plays once: mpvpaper exits at its end, uncovering its still.
 //! Omarchy plays videos itself, so the agent isn't involved there.
 
 use std::path::{Path, PathBuf};
@@ -9,11 +10,12 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use super::log;
-use crate::wallpaper::linux::wayland::session_command;
+use crate::wallpaper::linux::wayland::{hyprland_has_wallpaper_tool, session_command};
+use crate::wallpaper::linux::{Backend, detect};
 use crate::wallpaper::live::{self, MPVPAPER, Player};
 
-/// Muted, looping, filling the screen (cropping what doesn't fit).
-const MPV_OPTIONS: &str = "no-audio loop-file=inf panscan=1.0 hwdec=auto";
+/// Muted, filling the screen (cropping what doesn't fit).
+const MPV_OPTIONS: &str = "no-audio panscan=1.0 hwdec=auto";
 /// An mpvpaper that exits sooner than this counts as failing to start.
 const QUICK_EXIT: Duration = Duration::from_secs(10);
 /// The longest wait before trying again after it keeps failing.
@@ -49,7 +51,9 @@ impl Live {
     }
 
     pub fn sync(&mut self, want: Option<&Path>) {
-        self.reap();
+        if self.reap() {
+            return;
+        }
         let current = self.running.as_ref().map(|r| r.video.as_path());
         if current == want && current.is_some() {
             return;
@@ -73,7 +77,7 @@ impl Live {
             return;
         }
         let spawned = session_command(MPVPAPER)
-            .args(["-p", "-o", MPV_OPTIONS, "ALL"])
+            .args(["-p", "-o", &mpv_options(video), "ALL"])
             .arg(video)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -96,23 +100,32 @@ impl Live {
         }
     }
 
-    /// Notices an mpvpaper that exited, and schedules a restart.
-    fn reap(&mut self) {
+    /// Notices an mpvpaper that exited, and schedules a restart. Returns
+    /// whether it was an intro that played to its end (and is now done).
+    fn reap(&mut self) -> bool {
         let Some(running) = &mut self.running else {
-            return;
+            return false;
         };
         let Ok(Some(status)) = running.child.try_wait() else {
-            return;
+            return false;
         };
-        log(&format!("{MPVPAPER} exited ({status})"));
-        let quick = running.started.elapsed() < QUICK_EXIT;
         let video = running.video.clone();
+        let quick = running.started.elapsed() < QUICK_EXIT;
         self.running = None;
+        if status.success() && live::is_intro(&video) {
+            log("the intro finished");
+            if let Err(e) = live::set_playing(None) {
+                log(&format!("couldn't clear the intro: {e:#}"));
+            }
+            return true;
+        }
+        log(&format!("{MPVPAPER} exited ({status})"));
         if quick {
             self.back_off(&video);
         } else {
             self.failures = 0;
         }
+        false
     }
 
     fn back_off(&mut self, video: &Path) {
@@ -133,6 +146,21 @@ impl Live {
 impl Drop for Live {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+/// mpv options for `video`: looping, or for an intro played once. An intro
+/// holds its last frame where nothing shows a picture under it (Hyprland
+/// without hyprpaper or swww), as mpvpaper exiting would leave the screen bare.
+fn mpv_options(video: &Path) -> String {
+    if !live::is_intro(video) {
+        return format!("{MPV_OPTIONS} loop-file=inf");
+    }
+    let bare = matches!(detect(), Ok(Backend::Hyprland)) && !hyprland_has_wallpaper_tool();
+    if bare {
+        format!("{MPV_OPTIONS} keep-open=yes")
+    } else {
+        MPV_OPTIONS.to_string()
     }
 }
 

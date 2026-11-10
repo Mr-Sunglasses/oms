@@ -138,13 +138,29 @@ pub(super) fn check_out_previews(repo: &Path, tty: bool, label: &str) -> Result<
     Ok(())
 }
 
+/// Folder of a theme's intro animations (as in Omarchy: `<theme>/intros/`).
+pub const INTROS_DIR: &str = "intros";
+
+/// The wallpaper repo, theme folder name and folder inside the repo of a
+/// wallpaper there: `<repo>/<theme>/<file>` or `<repo>/<theme>/intros/<file>`.
+fn repo_parts(path: &Path) -> Option<(&Path, &std::ffi::OsStr, PathBuf)> {
+    let dir = path.parent()?;
+    let theme_dir = if dir.file_name()? == INTROS_DIR {
+        dir.parent()?
+    } else {
+        dir
+    };
+    let repo = theme_dir.parent()?;
+    let inside = dir.strip_prefix(repo).ok()?.to_path_buf();
+    Some((repo, theme_dir.file_name()?, inside))
+}
+
 /// The small preview of a wallpaper in the wallpaper repo, if it has one.
 pub fn preview_of(path: &Path) -> Option<PathBuf> {
-    let theme_dir = path.parent()?;
-    let preview = theme_dir
-        .parent()?
+    let (repo, _, inside) = repo_parts(path)?;
+    let preview = repo
         .join(PREVIEWS_DIR)
-        .join(theme_dir.file_name()?)
+        .join(inside)
         .join(format!("{}.jpg", path.file_name()?.to_string_lossy()));
     preview.exists().then_some(preview)
 }
@@ -156,8 +172,7 @@ pub fn ensure_local(path: &Path) -> Result<()> {
         return Ok(());
     }
     if preview_of(path).is_some()
-        && let Some(theme_dir) = path.parent()
-        && let (Some(repo), Some(slug)) = (theme_dir.parent(), theme_dir.file_name())
+        && let Some((repo, slug, _)) = repo_parts(path)
     {
         // On a full checkout this fails and changes nothing; the file is
         // then really missing, which is reported below.

@@ -20,7 +20,9 @@ pub fn status(repos: &Repos, settings: &Settings) -> Result<()> {
     let theme = ghostty::current_theme(&ghostty::config_path()).unwrap_or_else(|| "(none)".into());
     println!("Ghostty theme:    {theme}");
     if let Some(path) = wallpaper::current() {
-        let live = if wallpaper::live::is_video(&path) {
+        let live = if wallpaper::live::is_intro(&path) {
+            " (intro, playing)"
+        } else if wallpaper::live::is_video(&path) {
             " (live)"
         } else {
             ""
@@ -279,6 +281,8 @@ pub fn wallpapers(repos: &Repos, settings: &mut Settings, args: &[String]) -> Re
             for (i, path) in theme.wallpapers.iter().enumerate() {
                 let mark = if theme.is_custom_wallpaper(i) {
                     " (yours)"
+                } else if wallpaper::live::is_intro(path) {
+                    " (intro: plays once)"
                 } else if !path.exists() {
                     " (downloads when used)"
                 } else {

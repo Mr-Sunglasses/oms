@@ -31,6 +31,48 @@ pub fn is_video(path: &Path) -> bool {
     VIDEO_EXTENSIONS.contains(&ext.as_str())
 }
 
+/// An intro: an animation in a theme's `intros/` folder (Omarchy's layout).
+/// It plays once and ends on the picture of the same name beside that folder,
+/// instead of looping.
+pub fn is_intro(path: &Path) -> bool {
+    is_video(path)
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == crate::repo::INTROS_DIR)
+}
+
+/// The picture an intro ends on: `<theme>/<name>.jpg` (or png, …) for
+/// `<theme>/intros/<name>.mp4`, downloaded or only previewed so far.
+pub fn intro_still(intro: &Path) -> Option<PathBuf> {
+    if !is_intro(intro) {
+        return None;
+    }
+    let theme_dir = intro.parent()?.parent()?;
+    let stem = intro.file_stem()?.to_string_lossy();
+    ["jpg", "jpeg", "png", "webp", "heic"]
+        .iter()
+        .map(|ext| theme_dir.join(format!("{stem}.{ext}")))
+        .find(|p| p.exists() || crate::repo::preview_of(p).is_some())
+}
+
+/// The picture the desktop shows under a video, and after an intro ends: an
+/// intro's own still, else the video's first frame.
+pub fn resting_still(video: &Path) -> Result<PathBuf> {
+    match intro_still(video) {
+        Some(still) => {
+            crate::repo::ensure_local(&still)?;
+            Ok(still)
+        }
+        None => poster(video),
+    }
+}
+
+/// Where `resting_still` is (or would be), without making it.
+pub fn expected_still(video: &Path) -> PathBuf {
+    intro_still(video).unwrap_or_else(|| poster_path(video))
+}
+
 /// Who plays a video wallpaper on this desktop. (On macOS it's always the agent.)
 #[derive(Debug, PartialEq, Eq)]
 #[cfg_attr(target_os = "macos", allow(dead_code))]
@@ -200,6 +242,31 @@ mod tests {
             is_video(Path::new("/w/ocean.webm")),
             cfg!(not(target_os = "macos"))
         );
+    }
+
+    #[test]
+    fn intros_end_on_their_still() {
+        let dir = std::env::temp_dir().join(format!("oms-intro-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("nord/intros")).unwrap();
+        for f in [
+            "nord/0-moon.png",
+            "nord/intros/0-moon.mp4",
+            "nord/intros/9-lone.mp4",
+        ] {
+            fs::write(dir.join(f), "").unwrap();
+        }
+        let intro = dir.join("nord/intros/0-moon.mp4");
+        assert!(is_intro(&intro));
+        assert!(!is_intro(&dir.join("nord/0-moon.png")));
+        assert!(!is_intro(&dir.join("nord/rain.mp4")));
+        assert_eq!(intro_still(&intro), Some(dir.join("nord/0-moon.png")));
+        assert_eq!(resting_still(&intro).unwrap(), dir.join("nord/0-moon.png"));
+        // Without a picture of its own it ends on its first frame.
+        let lone = dir.join("nord/intros/9-lone.mp4");
+        assert_eq!(intro_still(&lone), None);
+        assert_eq!(expected_still(&lone), poster_path(&lone));
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

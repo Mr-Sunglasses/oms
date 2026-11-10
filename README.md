@@ -48,7 +48,7 @@ On Omarchy, Ghostty's config includes Omarchy's theme colors, which would hide t
 - **Matching wallpapers**, set on every desktop and screen at once.
 - **Light and dark mode:** pick a day theme and a night theme, and oms switches between them when your system does.
 - **Your apps too:** Neovim, btop, bat, tmux and the accent color (macOS, or GNOME 47+) can follow the theme.
-- **Live wallpapers:** add a video and it plays behind your desktop icons.
+- **Live wallpapers:** add a video and it plays behind your desktop icons, or pick one of Omarchy's intro animations.
 - **Wallpaper rotation**, favorites, search, and your own wallpapers.
 
 ## Using it
@@ -91,6 +91,8 @@ oms wallpapers add tokyo-night ~/Videos/rain.mp4
 ```
 
 It plays muted and on a loop, and its first frame becomes the ordinary wallpaper underneath (for the lock screen, and wherever the video can't play).
+
+Many Omarchy wallpapers also come with Omarchy's **intro**: a short animation that plays into the picture. They're listed after a theme's other wallpapers as `▶ intro`; pick one and it plays once, then rests on its picture. (On Omarchy itself, Omarchy plays them, if its intros are on.)
 
 | Where | How it plays |
 |---|---|

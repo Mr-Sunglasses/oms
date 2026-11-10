@@ -208,7 +208,7 @@ impl Replaced {
             // Some desktops can't say (Hyprland without hyprpaper).
             return false;
         };
-        let poster = wallpaper::live::poster_path(video);
+        let poster = wallpaper::live::expected_still(video);
         if !poster.exists() {
             // No still was set under it (ffmpeg missing), so the old picture
             // showing there says nothing.

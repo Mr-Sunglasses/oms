@@ -38,8 +38,9 @@ pub fn set_current_space(path: &Path) -> Result<()> {
 }
 
 /// Sets a picture with `set_still`, or for a video: hands it to a desktop
-/// that plays videos itself, or sets its first frame and has the agent play
-/// it on top. Where nothing can play it, the first frame stays.
+/// that plays videos itself, or sets the picture it rests on (an intro's own
+/// still, else its first frame) and has the agent play it on top. Where
+/// nothing can play it, that picture stays.
 fn apply(path: &Path, set_still: fn(&Path) -> Result<()>) -> Result<()> {
     if !live::is_video(path) {
         set_still(path)?;
@@ -48,6 +49,12 @@ fn apply(path: &Path, set_still: fn(&Path) -> Result<()>) -> Result<()> {
     crate::repo::ensure_local(path)?;
     let path = &path.canonicalize()?;
     match live::player() {
+        // An intro's still is enough: Omarchy plays the intro beside it
+        // itself (when its intros are switched on).
+        Player::Desktop if live::is_intro(path) => {
+            set_still(&live::resting_still(path)?)?;
+            live::set_playing(None)
+        }
         Player::Desktop => {
             set_still(path)?;
             live::set_playing(None)
@@ -56,14 +63,14 @@ fn apply(path: &Path, set_still: fn(&Path) -> Result<()>) -> Result<()> {
             // The still is what shows on the lock screen and while the agent
             // starts. On Hyprland without hyprpaper there's nowhere to set it,
             // and the video plays all the same.
-            let still = live::poster(path).and_then(|poster| set_still(&poster));
+            let still = live::resting_still(path).and_then(|still| set_still(&still));
             if cfg!(target_os = "macos") {
                 still?;
             }
             live::set_playing(Some(path))
         }
         Player::Missing(_) | Player::Unsupported(_) => {
-            set_still(&live::poster(path)?)?;
+            set_still(&live::resting_still(path)?)?;
             live::set_playing(None)
         }
     }

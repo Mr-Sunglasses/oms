@@ -1,7 +1,9 @@
 //! macOS: plays the live wallpaper in a borderless window on every screen,
 //! at the desktop picture's level (under the desktop icons), on every Space.
 //! One muted, looping player feeds all of them, and it pauses whenever none of
-//! them can be seen (a full-screen app, a locked or sleeping screen).
+//! them can be seen (a full-screen app, a locked or sleeping screen). An intro
+//! plays once instead; then the windows close on its still, which is already
+//! the desktop picture underneath.
 
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
@@ -22,14 +24,16 @@ use objc2_app_kit::{
     NSWorkspaceSessionDidBecomeActiveNotification,
 };
 use objc2_av_foundation::{
-    AVLayerVideoGravityResizeAspectFill, AVPlayerItem, AVPlayerLayer, AVPlayerLooper, AVQueuePlayer,
+    AVLayerVideoGravityResizeAspectFill, AVPlayerActionAtItemEnd, AVPlayerItem,
+    AVPlayerItemDidPlayToEndTimeNotification, AVPlayerLayer, AVPlayerLooper, AVQueuePlayer,
 };
 use objc2_foundation::{
-    NSDate, NSDefaultRunLoopMode, NSNotification, NSNotificationCenter, NSNotificationName,
-    NSPoint, NSRect, NSString, NSURL,
+    NSArray, NSDate, NSDefaultRunLoopMode, NSNotification, NSNotificationCenter,
+    NSNotificationName, NSPoint, NSRect, NSString, NSURL,
 };
 
 use super::log;
+use crate::wallpaper::live;
 
 /// `kCGDesktopWindowLevelKey`: the desktop picture's level, under the icons.
 const DESKTOP_WINDOW_LEVEL_KEY: i32 = 2;
@@ -39,18 +43,21 @@ unsafe extern "C" {
     fn CGWindowLevelForKey(key: i32) -> i32;
 }
 
-struct Playing {
-    video: PathBuf,
-    player: Retained<AVQueuePlayer>,
-    _looper: Retained<AVPlayerLooper>,
-    windows: Vec<Retained<NSWindow>>,
-    paused: bool,
-}
-
 type Observer = (
     Retained<NSNotificationCenter>,
     Retained<ProtocolObject<dyn NSObjectProtocol>>,
 );
+
+struct Playing {
+    video: PathBuf,
+    player: Retained<AVQueuePlayer>,
+    /// Loops it; an intro has none.
+    _looper: Option<Retained<AVPlayerLooper>>,
+    /// Tells when an intro has played to its end.
+    end: Option<Observer>,
+    windows: Vec<Retained<NSWindow>>,
+    paused: bool,
+}
 
 pub struct Live {
     /// `None` off the main thread, where `AppKit` can't be used.
@@ -62,6 +69,7 @@ pub struct Live {
     observers: Vec<Observer>,
     woken: Arc<AtomicBool>,
     screens_changed: Arc<AtomicBool>,
+    intro_ended: Arc<AtomicBool>,
 }
 
 impl Live {
@@ -73,6 +81,7 @@ impl Live {
             observers: Vec::new(),
             woken: woken.clone(),
             screens_changed: Arc::new(AtomicBool::new(false)),
+            intro_ended: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -84,6 +93,15 @@ impl Live {
     /// pauses while nothing of it can be seen.
     pub fn sync(&mut self, want: Option<&Path>) {
         let Some(mtm) = self.mtm else { return };
+        if self.intro_ended.swap(false, Ordering::SeqCst) && self.playing.is_some() {
+            // Its last frame is the still underneath, so closing is seamless.
+            log("the intro finished");
+            self.stop();
+            if let Err(e) = live::set_playing(None) {
+                log(&format!("couldn't clear the intro: {e:#}"));
+            }
+            return;
+        }
         if self.playing.as_ref().map(|p| p.video.as_path()) != want {
             self.stop();
             if let Some(video) = want {
@@ -120,25 +138,45 @@ impl Live {
             self.set_up_app(mtm);
         }
         let url = NSURL::fileURLWithPath(&NSString::from_str(&video.to_string_lossy()));
+        let intro = live::is_intro(video);
         // SAFETY: AVFoundation objects made and configured on the main thread;
         // the looper needs a template item, which `playerItemWithURL` gives.
-        let (player, looper) = unsafe {
+        let (player, item, looper) = unsafe {
             let item = AVPlayerItem::playerItemWithURL(&url, mtm);
-            let player = AVQueuePlayer::new(mtm);
+            let player = if intro {
+                let items = NSArray::from_slice(&[&*item]);
+                let player = AVQueuePlayer::queuePlayerWithItems(&items, mtm);
+                // Hold the last frame until the windows close.
+                player.setActionAtItemEnd(AVPlayerActionAtItemEnd::Pause);
+                player
+            } else {
+                AVQueuePlayer::new(mtm)
+            };
             player.setMuted(true);
             // Videos keep the display awake by default; a wallpaper mustn't.
             player.setPreventsDisplaySleepDuringVideoPlayback(false);
             player.setAllowsExternalPlayback(false);
-            let looper = AVPlayerLooper::playerLooperWithPlayer_templateItem(&player, &item);
+            let looper = (!intro)
+                .then(|| AVPlayerLooper::playerLooperWithPlayer_templateItem(&player, &item));
             player.play();
-            (player, looper)
+            (player, item, looper)
         };
+        let end = intro.then(|| {
+            self.intro_ended.store(false, Ordering::SeqCst);
+            let center = NSNotificationCenter::defaultCenter();
+            // SAFETY: AVFoundation exports the name as a constant string;
+            // reading the extern static is all that's unsafe.
+            let name = unsafe { AVPlayerItemDidPlayToEndTimeNotification };
+            let observer = observe_end(&center, name, &item, &self.woken, &self.intro_ended);
+            (center, observer)
+        });
         let windows = windows(mtm, &player);
         log(&format!("playing {}", video.display()));
         self.playing = Some(Playing {
             video: video.to_path_buf(),
             player,
             _looper: looper,
+            end,
             windows,
             paused: false,
         });
@@ -149,6 +187,9 @@ impl Live {
             // SAFETY: plain playback control on a player made on this thread.
             unsafe { playing.player.pause() };
             close(&playing.windows);
+            if let Some((center, observer)) = &playing.end {
+                remove(center, observer);
+            }
             log("stopped the live wallpaper");
         }
     }
@@ -230,10 +271,39 @@ impl Drop for Live {
     fn drop(&mut self) {
         self.stop();
         for (center, observer) in &self.observers {
-            let observer: &AnyObject = (**observer).as_ref();
-            // SAFETY: each observer was registered with this center, in `observe`.
-            unsafe { center.removeObserver(observer) };
+            remove(center, observer);
         }
+    }
+}
+
+/// Unregisters an observer from the center it was added to.
+fn remove(center: &NSNotificationCenter, observer: &ProtocolObject<dyn NSObjectProtocol>) {
+    let observer: &AnyObject = observer.as_ref();
+    // SAFETY: each observer was registered with this center, in `observe` or
+    // `observe_end`.
+    unsafe { center.removeObserver(observer) };
+}
+
+/// Registers a block that marks `ended` and wakes the agent when `item`
+/// posts `name` (it played to its end).
+fn observe_end(
+    center: &NSNotificationCenter,
+    name: &NSNotificationName,
+    item: &AVPlayerItem,
+    woken: &Arc<AtomicBool>,
+    ended: &Arc<AtomicBool>,
+) -> Retained<ProtocolObject<dyn NSObjectProtocol>> {
+    let woken = woken.clone();
+    let ended = ended.clone();
+    let block = RcBlock::new(move |_: NonNull<NSNotification>| {
+        ended.store(true, Ordering::SeqCst);
+        woken.store(true, Ordering::SeqCst);
+    });
+    let item: &AnyObject = item.as_ref();
+    // SAFETY: the block only stores to `AtomicBool`s, so it is fine to run on
+    // whatever thread posts the notification (the queue is nil).
+    unsafe {
+        center.addObserverForName_object_queue_usingBlock(Some(name), Some(item), None, &block)
     }
 }
 
